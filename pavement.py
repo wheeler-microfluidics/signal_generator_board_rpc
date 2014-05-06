@@ -7,8 +7,7 @@ from paver.setuputils import setup, find_package_data
 import version
 sys.path.append(path('.').abspath())
 from hv_switching_board_rpc import get_sketch_directory, package_path
-from hv_switching_board_rpc.proto import (get_protobuf_definitions,
-                                          get_command_processor_header)
+from arduino_rpc.proto import CodeGenerator
 
 
 hv_switching_board_rpc_files = find_package_data(package=
@@ -35,17 +34,19 @@ setup(name='wheeler.hv_switching_board_rpc',
 
 
 @task
-def generate_protobuf_definitions():
-    definition_str = get_protobuf_definitions()
+@cmdopts([('disable_i2c', 'd', 'Disable I2C communication.')])
+def generate_command_code():
+    code_generator = CodeGenerator(get_sketch_directory().joinpath('Node.h'),
+                                   disable_i2c=getattr(options, 'disable_i2c',
+                                                       False))
+
+    definition_str = code_generator.get_protobuf_definitions()
     output_dir = package_path().joinpath('protobuf').abspath()
     output_file = output_dir.joinpath('%s.proto' % PROTO_PREFIX)
     with output_file.open('wb') as output:
         output.write(definition_str)
 
-
-@task
-def generate_command_processor_header():
-    header_str = get_command_processor_header()
+    header_str = code_generator.get_command_processor_header()
     output_dir = get_sketch_directory()
     output_file = output_dir.joinpath('NodeCommandProcessor.h')
     with output_file.open('wb') as output:
@@ -58,7 +59,7 @@ def generate_command_processor_header():
 # examples.
 #
 # [1]: https://code.google.com/p/nanopb/source/browse/examples/using_union_messages/README.txt
-@needs('generate_protobuf_definitions')
+@needs('generate_command_code')
 def generate_nanopb_code():
     nanopb_home = package_path().joinpath('libs', 'nanopb').abspath()
     output_dir = package_path().joinpath('protobuf').abspath()
@@ -76,7 +77,7 @@ def copy_nanopb_python_module():
 
 
 @task
-@needs('copy_nanopb_python_module', 'generate_command_processor_header')
+@needs('copy_nanopb_python_module', 'generate_command_code')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
           ('boards=', 'b', 'Comma-separated list of board names to compile '
            'for (e.g., `uno`).')])
