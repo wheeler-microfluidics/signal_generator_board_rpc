@@ -169,8 +169,7 @@ class ArduinoBuildContext(object):
                                                  '/usr/share/arduino/')
             self.ARDUINO_PORT = self.resolve_var('ARDUINO_PORT',
                                                  get_usb_tty('/dev/ttyUSB*'))
-            default_sketchbook_home = os.path.expanduser('~/share/arduino/'
-                                                         'sketchbook/')
+            default_sketchbook_home = os.path.expanduser('~/sketchbook')
             if not os.path.exists(default_sketchbook_home):
                 default_sketchbook_home = ''
             self.SKETCHBOOK_HOME = self.resolve_var('SKETCHBOOK_HOME',
