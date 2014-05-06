@@ -6,7 +6,7 @@ from path_helpers import path
 
 import auto_config
 from git_util import GitUtil
-from arduino_rpc import package_path, get_sketch_directory
+from hv_switching_board_rpc import package_path, get_sketch_directory
 
 
 def get_version_string():

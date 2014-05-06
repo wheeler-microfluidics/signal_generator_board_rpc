@@ -1,3 +1,4 @@
+#include "SPI.h"
 #include "Wire.h"
 #include "Memory.h"
 #include "PacketParser.h"
@@ -16,18 +17,21 @@
 #include "CommandProcessor.h"
 #include "packet_handler.h"
 
+#define DISABLE_I2C
 
-#define PACKET_SIZE   28
+#define PACKET_SIZE   24
 /* To save RAM, the serial-port interface may be disabled by defining
  * `DISABLE_SERIAL`. */
 #ifndef DISABLE_SERIAL
 uint8_t packet_buffer[PACKET_SIZE];
 #endif  // #ifndef DISABLE_SERIAL
 
+#ifndef DISABLE_I2C
 uint8_t i2c_packet_buffer[PACKET_SIZE];
 uint8_t processing_i2c_request = false;
 uint8_t i2c_response_size_sent = false;
 FixedPacket i2c_packet;
+#endif
 
 Node node;
 CommandProcessor<Node> command_processor(node);
@@ -49,6 +53,7 @@ Reactor reactor(parser, Serial, handler);
 
 
 void setup() {
+#ifndef DISABLE_I2C
 #ifdef __AVR_ATmega2560__
   /* Join I2C bus as master. */
   Wire.begin();
@@ -60,12 +65,20 @@ void setup() {
 #endif  // #ifdef __AVR_ATmega328__
   // Set i2c clock-rate to 400kHz.
   TWBR = 12;
+  i2c_packet.reset_buffer(PACKET_SIZE, &i2c_packet_buffer[0]);
+#endif  // #ifndef DISABLE_I2C
 #ifndef DISABLE_SERIAL
   Serial.begin(115200);
   packet.reset_buffer(PACKET_SIZE, &packet_buffer[0]);
   parser.reset(&packet);
 #endif  // #ifndef DISABLE_SERIAL
-  i2c_packet.reset_buffer(PACKET_SIZE, &i2c_packet_buffer[0]);
+  pinMode(SS, OUTPUT);
+  pinMode(OE, OUTPUT);
+  pinMode(SRCLR, OUTPUT);
+  SPI.begin();
+  digitalWrite(SS, HIGH);
+  digitalWrite(SRCLR, HIGH);
+  digitalWrite(OE, LOW);
 }
 
 
@@ -76,13 +89,16 @@ void loop() {
    * process the request. */
   reactor.parse_available();
 #endif  // #ifndef DISABLE_SERIAL
+#ifndef DISABLE_I2C
   if (processing_i2c_request) {
     process_packet_with_processor(i2c_packet, command_processor);
     processing_i2c_request = false;
   }
+#endif  // #ifndef DISABLE_I2C
 }
 
 
+#ifndef DISABLE_I2C
 void i2c_receive_event(int byte_count) {
   processing_i2c_request = true;
   /* Record all bytes received on the i2c bus to a buffer.  The contents of
@@ -112,3 +128,4 @@ void i2c_request_event() {
     i2c_response_size_sent = false;
   }
 }
+#endif

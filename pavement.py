@@ -6,30 +6,32 @@ from paver.setuputils import setup, find_package_data
 
 import version
 sys.path.append(path('.').abspath())
-from arduino_rpc import get_sketch_directory, package_path
-from arduino_rpc.proto import (get_protobuf_definitions,
-                               get_command_processor_header)
+from hv_switching_board_rpc import get_sketch_directory, package_path
+from hv_switching_board_rpc.proto import (get_protobuf_definitions,
+                                          get_command_processor_header)
 
 
-arduino_rpc_files = find_package_data(package='arduino_rpc',
-                                      where='arduino_rpc',
-                                      only_in_packages=False)
-pprint(arduino_rpc_files)
+hv_switching_board_rpc_files = find_package_data(package=
+                                                 'hv_switching_board_rpc',
+                                                 where=
+                                                 'hv_switching_board_rpc',
+                                                 only_in_packages=False)
+pprint(hv_switching_board_rpc_files)
 
 PROTO_PREFIX = 'commands'
 
 DEFAULT_ARDUINO_BOARDS = ['mega2560']
 #DEFAULT_ARDUINO_BOARDS = ['uno']
 
-setup(name='wheeler.arduino_rpc',
+setup(name='wheeler.hv_switching_board_rpc',
       version=version.getVersion(),
       description='Arduino RPC node packaged as Python package.',
       author='Christian Fobel',
       author_email='christian@fobel.net',
-      url='http://github.com/wheeler-microfluidics/arduino_rpc.git',
+      url='http://github.com/wheeler-microfluidics/hv_switching_board_rpc.git',
       license='GPLv2',
-      packages=['arduino_rpc'],
-      package_data=arduino_rpc_files)
+      packages=['hv_switching_board_rpc'],
+      package_data=hv_switching_board_rpc_files)
 
 
 @task

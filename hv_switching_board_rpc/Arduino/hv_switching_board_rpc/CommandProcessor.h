@@ -92,7 +92,18 @@ public:
 
       GetMicrosRequest get_micros;
 
+#ifndef DISABLE_I2C
       ForwardI2cRequestRequest forward_i2c_request;
+#endif  // #ifndef DISABLE_I2C
+
+      SpiWriteRequest spi_write;
+#if 0
+      SpiWrite2Request spi_write2;
+
+      SpiWrite4Request spi_write4;
+
+      SpiWrite5Request spi_write5;
+#endif
      } request;
 
     union {
@@ -132,12 +143,26 @@ public:
 
       GetMicrosResponse get_micros;
 
+#ifndef DISABLE_I2C
       ForwardI2cRequestResponse forward_i2c_request;
+#endif  // #ifndef DISABLE_I2C
+
+      SpiWriteResponse spi_write;
+
+#if 0
+      SpiWrite2Response spi_write2;
+
+      SpiWrite4Response spi_write4;
+
+      SpiWrite5Response spi_write5;
+#endif
      } response;
 
     pb_field_t *fields_type;
     bool status = true;
+#ifndef DISABLE_I2C
     uint8_t i2c_count = 0;
+#endif  // #ifndef DISABLE_I2C
 
     pb_istream_t istream = pb_istream_from_buffer(buffer, request_size);
 
@@ -202,11 +227,27 @@ public:
       case CommandType_GET_MICROS:
         fields_type = (pb_field_t *)GetMicrosRequest_fields;
         break;
+#ifndef DISABLE_I2C
       case CommandType_FORWARD_I2C_REQUEST:
         request.forward_i2c_request.request.funcs.decode = &read_string;
         request.forward_i2c_request.request.arg = &string_buffer_;
         fields_type = (pb_field_t *)ForwardI2cRequestRequest_fields;
         break;
+#endif  // #ifndef DISABLE_I2C
+      case CommandType_SPI_WRITE:
+        fields_type = (pb_field_t *)SpiWriteRequest_fields;
+        break;
+#if 0
+      case CommandType_SPI_WRITE2:
+        fields_type = (pb_field_t *)SpiWrite2Request_fields;
+        break;
+      case CommandType_SPI_WRITE4:
+        fields_type = (pb_field_t *)SpiWrite4Request_fields;
+        break;
+      case CommandType_SPI_WRITE5:
+        fields_type = (pb_field_t *)SpiWrite5Request_fields;
+        break;
+#endif
       default:
         status = false;
         break;
@@ -311,6 +352,7 @@ public:
         response.get_micros.result =
         obj_.get_micros();
         break;
+#ifndef DISABLE_I2C
       case CommandType_FORWARD_I2C_REQUEST:
         fields_type = (pb_field_t *)ForwardI2cRequestResponse_fields;
         /* Forward all bytes received on the local serial-stream to the i2c
@@ -417,6 +459,29 @@ public:
          * encoded and we wrote the encoded response directly to the
          * buffer. */
         return request_size;
+#endif  // #ifndef DISABLE_I2C
+      case CommandType_SPI_WRITE:
+        fields_type = (pb_field_t *)SpiWriteResponse_fields;
+
+        obj_.spi_write(request.spi_write.byte);
+        break;
+#if 0
+      case CommandType_SPI_WRITE2:
+        fields_type = (pb_field_t *)SpiWrite2Response_fields;
+
+        obj_.spi_write2(request.spi_write2.two_bytes);
+        break;
+      case CommandType_SPI_WRITE4:
+        fields_type = (pb_field_t *)SpiWrite4Response_fields;
+
+        obj_.spi_write4(request.spi_write4.four_bytes);
+        break;
+      case CommandType_SPI_WRITE5:
+        fields_type = (pb_field_t *)SpiWrite5Response_fields;
+
+        obj_.spi_write5(request.spi_write5.four_bytes, request.spi_write5.byte_five);
+        break;
+#endif
       default:
         return -1;
         break;
