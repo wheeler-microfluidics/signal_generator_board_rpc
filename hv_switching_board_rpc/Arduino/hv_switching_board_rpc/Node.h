@@ -26,24 +26,58 @@ extern void i2c_request_event();
 
 class Node {
 public:
+  static const uint8_t REGISTER_COUNT = 5;
+  static const uint8_t CHANNEL_COUNT = REGISTER_COUNT * 8;
+  uint8_t state_of_channels_[REGISTER_COUNT];
+  uint8_t pwm_state_[REGISTER_COUNT][16];
+  boolean pwm_enabled_;
+	
   uint32_t total_ram_size() { return ram_size(); }
   uint32_t ram_free() { return free_memory(); }
 
-  void pin_mode(uint8_t pin, uint8_t mode) { return pinMode(pin, mode); }
-  bool digital_read(uint8_t pin) const { return digitalRead(pin); }
-  void digital_write(uint8_t pin, uint8_t value) { digitalWrite(pin, value); }
+  bool get_state_of_channel(uint8_t channel) {
+	uint8_t register_id = channel / 8;
+	uint8_t bit = channel % 8;
+	return (state_of_channels_[register_id] >> bit) & 0x1;
+  }
 
-  void shift_register_reset() {
-    /* Clear the state of the shift-register. */
-    digital_write(SRCLR, LOW);
-    delay(1);
-    digital_write(SRCLR, HIGH);
+  void set_state_of_all_channels(uint32_t four_bytes, uint8_t byte_five) {
+	/* Load first four register states from `four_bytes` into
+	 * `state_of_channels_` array. */
+	for (uint8_t i = 0; i < 4; i++) {
+        state_of_channels_[i] = (four_bytes >> (8 * i)) & 0x0FF;
+    }
+    /* Set state of most significant register with contents of `byte_five`. */
+	state_of_channels_[4] = byte_five;
+	if (!pwm_enabled_) {
+		for (int i = REGISTER_COUNT-1; i >= 0; i--) {
+			spi_write(state_of_channels_[i]);
+		}
+	}
+  }
+
+  bool get_pwm_enabled() {
+	return pwm_enabled_;
+  }
+
+  void set_pwm_enabled(bool value) {
+	pwm_enabled_ = value;
+  }
+
+void set_pwm_state(uint32_t four_bytes, uint8_t byte_five, uint16_t time_slice) {
+	for (uint16_t j = 0; j < 16; j++) {
+	  for (uint8_t i = 0; i < 4; i++) {
+        pwm_state_[i][j] = (four_bytes >> (8 * i)) & 0x0FF;
+      }
+      /* Set state of most significant register with contents of `byte_five`. */
+      pwm_state_[4][j] = byte_five;
+    }
   }
 
   void spi_write(uint8_t byte) {
-    digital_write(SS, LOW);
+    digitalWrite(SS, LOW);
     SPI.transfer(byte);
-    digital_write(SS, HIGH);
+    digitalWrite(SS, HIGH);
   }
 
   void spi_write2(uint16_t two_bytes) {

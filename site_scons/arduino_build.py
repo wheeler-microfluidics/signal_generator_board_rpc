@@ -149,7 +149,7 @@ class ArduinoBuildContext(object):
                                                  'Resources/Java')
             self.ARDUINO_PORT = self.resolve_var('ARDUINO_PORT',
                                                  get_usb_tty('/dev/'
-                                                             'tty.usbserial*'))
+                                                             'cu.usbserial*'))
             self.SKETCHBOOK_HOME = self.resolve_var('SKETCHBOOK_HOME', '')
             self.AVR_HOME = self.resolve_var('AVR_HOME',
                                              os.path.join(self.ARDUINO_HOME,
