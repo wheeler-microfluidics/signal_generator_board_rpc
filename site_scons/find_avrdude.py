@@ -12,12 +12,13 @@ if os.name == 'nt':
     from win32com.shell import shell, shellcon
     mydocs = shell.SHGetFolderPath(0, shellcon.CSIDL_PERSONAL, 0, 0)
     AVRDUDE_NAME = 'avrdude.exe'
-    ARDUINO_SEARCH_PATHS += [path(mydocs), 
-                            path('%SYSTEMDRIVE%/').expand(),
-                            path('%PROGRAMFILES%').expand(), ]
+    ARDUINO_SEARCH_PATHS += [path(mydocs), path('%SYSTEMDRIVE%/').expand(),
+                             path('%PROGRAMFILES%').expand(), ]
 else:
     AVRDUDE_NAME = 'avrdude'
-    ARDUINO_SEARCH_PATHS += [path("/usr/share/")]
+    ARDUINO_SEARCH_PATHS += [path("/usr/share/"),
+                             path('/Applications/Arduino.app/Contents/'
+                                  'Resources/Java')]
 
 
 def get_arduino_paths():
@@ -50,7 +51,8 @@ def get_arduino_paths():
     arduino_path = p.parent
     avrdude_conf = list(arduino_path.walkfiles('avrdude.conf'))
     if not avrdude_conf:
-        print >> sys.stderr, '''avrdude configuration (avrdude.conf) path not found.'''
+        print >> sys.stderr, ('''avrdude configuration (avrdude.conf) path '''
+                              '''not found.''')
         sys.exit(1)
     else:
         avrdude_conf = avrdude_conf[0]
@@ -58,7 +60,8 @@ def get_arduino_paths():
 
 
 def get_avrdude_list(p):
-    return list(set(chain(*[d.walkfiles(AVRDUDE_NAME) for d in p.dirs('arduino*')])))
+    return list(set(chain(*[d.walkfiles(AVRDUDE_NAME)
+                            for d in p.dirs('arduino*')])))
 
 
 def get_arduino_version(p):
