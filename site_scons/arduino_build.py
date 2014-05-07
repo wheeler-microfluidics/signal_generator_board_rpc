@@ -139,9 +139,12 @@ class ArduinoBuildContext(object):
         self.AVRDUDE_CONF = None
         self.AVR_HOME_DUDE = None
 
-        if os.name == 'darwin':
+        # TODO: Test between OSX and Linux, since they both return `os.name ==
+        # 'posix'`.
+        if os.name in ('darwin', 'posix'):
             # For MacOS X, pick up the AVR tools from within Arduino.app
-            self.ARDUINO_HOME = self.resolve_var('ARDUINO_HOME/Applications'
+            self.ARDUINO_HOME = self.resolve_var('ARDUINO_HOME',
+                                                 '/Applications'
                                                  '/Arduino.app/Contents/'
                                                  'Resources/Java')
             self.ARDUINO_PORT = self.resolve_var('ARDUINO_PORT',
@@ -211,7 +214,9 @@ class ArduinoBuildContext(object):
             print "Arduino version " + self.ARDUINO_VER + " specified"
 
         # Some OSs need bundle with IDE tool-chain
-        if os.name == 'darwin' or os.name == 'nt':
+        # TODO: Test between OSX and Linux, since they both return `os.name ==
+        # 'posix'`.
+        if os.name in ('darwin', 'posix') or os.name == 'nt':
             self.AVRDUDE_CONF = os.path.join(self.ARDUINO_HOME,
                                              'hardware/tools/avr/etc/'
                                              'avrdude.conf')
