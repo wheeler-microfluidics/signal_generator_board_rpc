@@ -3,6 +3,8 @@ from collections import OrderedDict
 import nadamq
 from path_helpers import path
 
+from .board import HVSwitchingBoard
+
 
 def package_path():
     return path(__file__).parent

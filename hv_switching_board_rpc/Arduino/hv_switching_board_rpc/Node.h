@@ -2,6 +2,7 @@
 #define ___NODE__H___
 
 #include <stdint.h>
+#include "Array.h"
 #include "Memory.h"
 
 /* # Arduino digital pins connected to shift registers #
