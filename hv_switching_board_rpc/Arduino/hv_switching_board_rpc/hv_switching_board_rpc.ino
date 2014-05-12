@@ -24,6 +24,8 @@ uint8_t i2c_response_size_sent = false;
 FixedPacket i2c_packet;
 #endif
 
+uint8_t pwm_states[5][16];
+
 Node node;
 CommandProcessor<Node> command_processor(node);
 
