@@ -1,6 +1,8 @@
 #include "SPI.h"
 #include "Wire.h"
 #include "Memory.h"
+#include "OneWire.h"
+#include "EEPROM.h"
 #include "PacketParser.h"
 #include "Node.h"
 #include "CommandPacketHandler.h"
@@ -26,7 +28,8 @@ FixedPacket i2c_packet;
 
 uint8_t pwm_states[5][16];
 
-Node node;
+DMFControlBoard dmf_control_board;
+Node node(dmf_control_board);
 CommandProcessor<Node> command_processor(node);
 
 #ifndef DISABLE_SERIAL
@@ -46,6 +49,7 @@ Reactor reactor(parser, Serial, handler);
 
 
 void setup() {
+  dmf_control_board.begin();
 #ifndef DISABLE_I2C
 #ifdef __AVR_ATmega2560__
   /* Join I2C bus as master. */
