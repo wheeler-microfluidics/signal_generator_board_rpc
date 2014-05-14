@@ -70,7 +70,7 @@ __________________________________________________________________________
 #include <stdint.h>
 #include "Deserialize.h"
 
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
   #include "Logging.h"
   #include "SimpleSerial.h"
   #include <string>
@@ -80,7 +80,7 @@ __________________________________________________________________________
 
 class RemoteObject {
 public:
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
   static const uint32_t TIMEOUT_MILLISECONDS =   1000; // TODO: this should be configurable
 #else
   static const uint8_t I2C_DELAY = 100; // delay between i2c write/reads
@@ -140,7 +140,7 @@ public:
   static const char MCU_TYPE_[];
 
   RemoteObject(bool crc_enabled_
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
                  ,const char* class_name
 #endif
                  );
@@ -380,7 +380,7 @@ protected:
   \param cmd command code
   \returns RETURN_OK if successfull
   */
-  virtual uint8_t process_command(uint8_t cmd) = 0;
+  virtual uint8_t process_command(uint8_t cmd);
   uint16_t payload_length() { return payload_length_; }
 
   // WARNING: The following two functions should only be used if you really
@@ -395,7 +395,7 @@ protected:
   void send_reply(const uint8_t return_code);
 
   template<typename T> void read_array(T* array, const uint16_t size) {
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
     log_message("","read_array()");
 #endif
     bytes_read_ += size;
@@ -433,7 +433,7 @@ protected:
   void send_non_blocking_command(const uint8_t cmd);
   uint8_t validate_reply(const uint8_t cmd);
 
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
   inline void log_message(const char* msg,
                           const char* function_name,
                           uint8_t level=5) {
@@ -480,7 +480,7 @@ private:
   uint16_t tx_crc_;
   uint16_t rx_crc_;
   bool debug_;
-#if !( defined(AVR) || defined(__SAM3X8E__) ) 
+#if !( defined(AVR) || defined(__SAM3X8E__) )
   SimpleSerial Serial;
   std::string class_name_;
   boost::posix_time::ptime time_cmd_sent_;

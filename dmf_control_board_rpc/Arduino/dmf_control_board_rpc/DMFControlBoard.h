@@ -46,6 +46,11 @@ public:
   /**\brief Address of config settings in persistent storage _(i.e., EEPROM)_.
    */
   static const uint16_t PERSISTENT_CONFIG_SETTINGS = 100;
+  #if ___HARDWARE_MAJOR_VERSION___ == 1 && ___HARDWARE_MINOR_VERSION___ > 1
+    static const uint8_t POWER_SUPPLY_ON_PIN_ = 8;
+  #elif ___HARDWARE_MAJOR_VERSION___ == 2
+    static const uint8_t POWER_SUPPLY_ON_PIN_ = 2;
+  #endif
 
   struct version_t {
     uint16_t major;
@@ -370,7 +375,6 @@ public:
 #endif  // #ifndef AVR
 
   // private functions
-  virtual uint8_t process_command(uint8_t cmd);
 #if defined(AVR) || defined(__SAM3X8E__)
   uint8_t update_channel(const uint16_t channel, const uint8_t state);
   void update_all_channels();
@@ -383,10 +387,27 @@ public:
   version_t config_version();
   uint8_t set_waveform_voltage(const float output_vrms,
                                const bool wait_for_reply=true);
+  float measure_impedance(uint16_t sampling_time_ms, uint16_t n_samples,
+                          uint16_t delay_between_samples_ms);
 #endif
 #ifdef AVR
   uint8_t set_adc_prescaler(const uint8_t index);
 #endif
+  //private members
+#if defined(AVR) || defined(__SAM3X8E__)
+  uint16_t number_of_channels_;
+  uint8_t sampling_rate_index_;
+  uint8_t A0_series_resistor_index_;
+  uint8_t A1_series_resistor_index_;
+  uint8_t peak_;
+  float waveform_voltage_;
+  float waveform_frequency_;
+  float amplifier_gain_;
+  bool auto_adjust_amplifier_gain_;
+  ConfigSettings config_settings_;
+#endif  // #ifdef AVR
+
+  static const float SAMPLING_RATES_[];
 private:
   // private static members
   static const char SOFTWARE_VERSION_[];
@@ -408,12 +429,6 @@ private:
     static const uint8_t POT_INDEX_VGND_ = 1;
     static const uint8_t POT_INDEX_WAVEOUT_GAIN_1_ = 2;
     static const uint8_t POT_INDEX_WAVEOUT_GAIN_2_ = 3;
-  #endif
-
-  #if ___HARDWARE_MAJOR_VERSION___ == 1 && ___HARDWARE_MINOR_VERSION___ > 1
-    static const uint8_t POWER_SUPPLY_ON_PIN_ = 8;
-  #elif ___HARDWARE_MAJOR_VERSION___ == 2
-    static const uint8_t POWER_SUPPLY_ON_PIN_ = 2;
   #endif
 
   #if ___HARDWARE_MAJOR_VERSION___ == 1
@@ -438,8 +453,6 @@ private:
     static const uint8_t A1_SERIES_RESISTOR_3_ = 9;
   #endif
 
-  static const float SAMPLING_RATES_[];
-
   // I2C bus
   // =======
   // A4 SDA
@@ -462,19 +475,6 @@ private:
 #endif  // #ifdef AVR
 
 
-  //private members
-#if defined(AVR) || defined(__SAM3X8E__)
-  uint16_t number_of_channels_;
-  uint8_t sampling_rate_index_;
-  uint8_t A0_series_resistor_index_;
-  uint8_t A1_series_resistor_index_;
-  uint8_t peak_;
-  float waveform_voltage_;
-  float waveform_frequency_;
-  float amplifier_gain_;
-  bool auto_adjust_amplifier_gain_;
-  ConfigSettings config_settings_;
-#endif  // #ifdef AVR
 };
 #endif // _DMF_CONTROL_BOARD_H_
 

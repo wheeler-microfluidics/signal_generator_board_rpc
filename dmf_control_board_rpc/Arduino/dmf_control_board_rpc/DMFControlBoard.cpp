@@ -77,712 +77,180 @@ DMFControlBoard::DMFControlBoard()
 DMFControlBoard::~DMFControlBoard() {
 }
 
-uint8_t DMFControlBoard::process_command(uint8_t cmd) {
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-  const char* function_name = "process_command()";
-  log_message(str(format("command=0x%0X (%d)") % cmd % cmd).c_str(),
-              function_name);
-#endif
-  switch(cmd) {
-#if defined(AVR) || defined(__SAM3X8E__) // Commands that only the Arduino handles
-    case CMD_GET_NUMBER_OF_CHANNELS:
-      if (payload_length() == 0) {
-        serialize(&number_of_channels_, sizeof(number_of_channels_));
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_STATE_OF_ALL_CHANNELS:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        for (uint8_t chip = 0; chip < number_of_channels_ / 40; chip++) {
-          for (uint8_t port = 0; port < 5; port++) {
-            Wire.beginTransmission(config_settings_.switching_board_i2c_address
-                                   + chip);
-            Wire.write(PCA9505_OUTPUT_PORT_REGISTER_ + port);
-            Wire.endTransmission();
-            Wire.requestFrom(
-              config_settings_.switching_board_i2c_address + chip, 1);
-            if (Wire.available()) {
-              uint8_t data = Wire.read();
-              uint8_t state;
-              for (uint8_t bit = 0; bit < 8; bit++) {
-                state = (data >> bit & 0x01) == 0;
-                serialize(&state, sizeof(state));
-              }
-            } else {
-              return_code_ = RETURN_GENERAL_ERROR;
-              break; break;
-            }
-          }
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_STATE_OF_ALL_CHANNELS:
-      if (payload_length() == number_of_channels_ * sizeof(uint8_t)) {
-        update_all_channels();
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_STATE_OF_CHANNEL:
-      if (payload_length() == sizeof(uint16_t)) {
-        uint16_t channel = read_uint16();
-        if (channel >= number_of_channels_ || channel < 0) {
-          return_code_ = RETURN_BAD_INDEX;
-        } else {
-          uint8_t chip = channel / 40;
-          uint8_t port = (channel % 40) / 8;
-          uint8_t bit = (channel % 40) % 8;
-          Wire.beginTransmission(
-            config_settings_.switching_board_i2c_address + chip);
-          Wire.write(PCA9505_OUTPUT_PORT_REGISTER_ + port);
-          Wire.endTransmission();
-          Wire.requestFrom(
-            config_settings_.switching_board_i2c_address + chip, 1);
-          if (Wire.available()) {
-            uint8_t data = Wire.read();
-            data = (data >> bit & 0x01) == 0;
-            serialize(&data, sizeof(data));
-            return_code_ = RETURN_OK;
+float DMFControlBoard::measure_impedance(uint16_t sampling_time_ms,
+                                         uint16_t n_samples,
+                                         uint16_t delay_between_samples_ms) {
+  /* Only collect enough samples to fill the maximum payload length. */
+  uint16_t max_samples = MAX_PAYLOAD_LENGTH /
+                         (2 * sizeof(int8_t) + 2 * sizeof(int16_t));
+  if (n_samples > max_samples) {
+    n_samples = max_samples;
+  }
+
+  /* Save current resistor indexes to return them to their original state when
+   * we're done. */
+  uint8_t original_A0_index = A0_series_resistor_index_;
+  uint8_t original_A1_index = A1_series_resistor_index_;
+
+  /* Set the resistors to their highest values */
+  set_series_resistor(0, sizeof(config_settings_.A0_series_resistance) /
+                    sizeof(float) - 1);
+  set_series_resistor(1, sizeof(config_settings_.A1_series_resistance) /
+                    sizeof(float) - 1);
+
+  /* Sample the feedback voltage. */
+  for (uint16_t i = 0; i < n_samples; i++) {
+    uint16_t hv_max = 0;
+    uint16_t hv_min = 1023;
+    uint16_t hv = 0;
+    int16_t hv_pk_pk;
+    int8_t hv_resistor = A0_series_resistor_index_;
+    uint16_t fb_max = 0;
+    uint16_t fb_min = 1023;
+    uint16_t fb = 0;
+    int16_t fb_pk_pk;
+    int8_t fb_resistor = A1_series_resistor_index_;
+    uint32_t t_sample = millis();
+
+    while (millis() - t_sample < sampling_time_ms) {
+      // `hv_resistor == -1` if the smallest series resistor becomes saturated.
+      if (hv_resistor != -1) {
+        hv = analogRead(0);
+        // If the ADC is saturated, use a smaller resistor and reset the peak.
+        if (hv > 820) {
+          if (A0_series_resistor_index_ > 0) {
+            set_series_resistor(0, A0_series_resistor_index_ - 1);
+            hv_max = 0;
+            hv_min = 1023;
           } else {
-            return_code_ = RETURN_GENERAL_ERROR;
+            hv_resistor = -1;
           }
+          continue;
         }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_STATE_OF_CHANNEL:
-      if (payload_length() == sizeof(uint16_t) + sizeof(uint8_t)) {
-        uint16_t channel = read_uint16();
-        uint8_t state = read_uint8();
-        if (channel < number_of_channels_) {
-          return_code_ = update_channel(channel, state);
-        } else {
-          return_code_ = RETURN_BAD_INDEX;
+        if (hv > hv_max) {
+          hv_max = hv;
         }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-    case CMD_GET_WAVEFORM:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t waveform = digitalRead(WAVEFORM_SELECT_);
-        serialize(&waveform, sizeof(waveform));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_WAVEFORM:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t waveform = read_uint8();
-        if (waveform == SINE || waveform == SQUARE) {
-          digitalWrite(WAVEFORM_SELECT_, waveform);
-          return_code_ = RETURN_OK;
-        } else {
-          return_code_ = RETURN_BAD_VALUE;
+        if (hv < hv_min) {
+          hv_min = hv;
         }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
       }
-      break;
-#endif  //#if ___HARDWARE_MAJOR_VERSION___ == 1
-    case CMD_GET_WAVEFORM_VOLTAGE:
-      if (payload_length() == 0) {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-        return_code_ = RETURN_OK;
-        serialize(&waveform_voltage_, sizeof(waveform_voltage_));
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-        i2c_write(config_settings_.signal_generator_board_i2c_address, cmd);
-        delay(I2C_DELAY);
-        Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
-                         (uint8_t)1);
-        if (Wire.available()) {
-          uint8_t n_bytes_to_read = Wire.read();
-          if (n_bytes_to_read == sizeof(float) + 1) {
-            uint8_t data[5];
-            i2c_read(config_settings_.signal_generator_board_i2c_address,
-                     (uint8_t *)&data[0], 5);
-            return_code_ = data[4];
-            if (return_code_ == RETURN_OK) {
-              memcpy(&waveform_voltage_, &data[0], sizeof(float));
-              waveform_voltage_ *= amplifier_gain_;
-              serialize(&waveform_voltage_, sizeof(float));
-            }
-          }
-        }
-#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_WAVEFORM_VOLTAGE:
-      if (payload_length() == sizeof(float)) {
-        return_code_ = set_waveform_voltage(read_float());
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_WAVEFORM_FREQUENCY:
-      if (payload_length() == 0) {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-        return_code_ = RETURN_OK;
-        serialize(&waveform_frequency_, sizeof(waveform_frequency_));
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-        i2c_write(config_settings_.signal_generator_board_i2c_address, cmd);
-        delay(I2C_DELAY);
-        Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
-                         (uint8_t)1);
-        if (Wire.available()) {
-          uint8_t n_bytes_to_read = Wire.read();
-          if (n_bytes_to_read == sizeof(float) + 1) {
-              uint8_t data[5];
-              i2c_read(config_settings_.signal_generator_board_i2c_address,
-                       (uint8_t * )&data[0], 5);
-              return_code_ = data[4];
-              if (return_code_ == RETURN_OK) {
-                memcpy(&waveform_frequency_, &data[0], sizeof(float));
-                serialize(&waveform_frequency_, sizeof(float));
-              }
-            }
-          }
-#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_WAVEFORM_FREQUENCY:
-      if (payload_length() == sizeof(float)) {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-        // the frequency of the LTC6904 oscillator needs to be set to 50x
-        // the fundamental frequency
-        waveform_frequency_ = read_float();
-        float freq = waveform_frequency_ * 50;
-        // valid frequencies are 1kHz to 68MHz
-        if (freq < 1e3 || freq > 68e6) {
-          return_code_ = RETURN_BAD_VALUE;
-        } else {
-          uint8_t oct = 3.322 * log(freq / 1039) / log(10);
-          uint16_t dac = round(2048 - (2078 * pow(2, 10 + oct)) / freq);
-          uint8_t cnf = 2; // CLK on, /CLK off
-          // msb = OCT3 OCT2 OCT1 OCT0 DAC9 DAC8 DAC7 DAC6
-          uint8_t msb = (oct << 4) | (dac >> 6);
-          // lsb =  DAC5 DAC4 DAC3 DAC2 DAC1 DAC0 CNF1 CNF0
-          uint8_t lsb = (dac << 2) | cnf;
-          Wire.beginTransmission(LTC6904_);
-          Wire.write(msb);
-          Wire.write(lsb);
-          Wire.endTransmission();     // stop transmitting
-          return_code_ = RETURN_OK;
-        }
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-        waveform_frequency_ = read_float();
-        uint8_t data[5];
-        data[0] = cmd;
-        memcpy(&data[1], &waveform_frequency_, sizeof(float));
-        i2c_write(config_settings_.signal_generator_board_i2c_address,
-                  data, 5);
-        delay(I2C_DELAY);
-        Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
-                         (uint8_t)1);
-        if (Wire.available()) {
-          uint8_t n_bytes_to_read = Wire.read();
-          if (n_bytes_to_read == 1) {
-            uint8_t n_bytes_read = 0;
-            n_bytes_read += i2c_read(
-              config_settings_.signal_generator_board_i2c_address,
-              (uint8_t * )&return_code_,
-              sizeof(return_code_));
-          }
-        }
-#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#ifdef AVR // only on Arduino Mega 2560
-    case CMD_GET_SAMPLING_RATE:
-      if (payload_length() == 0) {
-        serialize(&SAMPLING_RATES_[sampling_rate_index_], sizeof(float));
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_SAMPLING_RATE:
-      if (payload_length() == sizeof(uint8_t)) {
-        return_code_ = set_adc_prescaler(read_uint8());
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#endif
-    case CMD_GET_SERIES_RESISTOR_INDEX:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t channel = read_uint8();
-        return_code_ = RETURN_OK;
-        switch(channel) {
-          case 0:
-            serialize(&A0_series_resistor_index_,
-                      sizeof(A0_series_resistor_index_));
-            break;
-          case 1:
-            serialize(&A1_series_resistor_index_,
-                      sizeof(A1_series_resistor_index_));
-            break;
-          default:
-            return_code_ = RETURN_BAD_INDEX;
-            break;
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_SERIES_RESISTOR_INDEX:
-      if (payload_length() == 2*sizeof(uint8_t)) {
-        uint8_t channel = read_uint8();
-        return_code_ = set_series_resistor(channel, read_uint8());
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_SERIES_RESISTANCE:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t channel = read_uint8();
-        return_code_ = RETURN_OK;
-        switch(channel) {
-          case 0:
-            serialize(&config_settings_.A0_series_resistance
-                      [A0_series_resistor_index_], sizeof(float));
-            break;
-          case 1:
-            serialize(&config_settings_.A1_series_resistance
-                      [A1_series_resistor_index_], sizeof(float));
-            break;
-          default:
-            return_code_ = RETURN_BAD_INDEX;
-            break;
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_SERIES_RESISTANCE:
-      if (payload_length() == sizeof(uint8_t) + sizeof(float)) {
-        uint8_t channel = read_uint8();
-        return_code_ = RETURN_OK;
-        switch(channel) {
-          case 0:
-            config_settings_.A0_series_resistance[A0_series_resistor_index_] =
-                read_float();
-            save_config();
-            break;
-          case 1:
-            config_settings_.A1_series_resistance[A1_series_resistor_index_] =
-                read_float();
-            save_config();
-            break;
-          default:
-            return_code_ = RETURN_BAD_INDEX;
-            break;
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_SERIES_CAPACITANCE:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t channel = read_uint8();
-        return_code_ = RETURN_OK;
-        switch(channel) {
-          case 0:
-            serialize(&config_settings_.A0_series_capacitance
-                      [A0_series_resistor_index_], sizeof(float));
-            break;
-          case 1:
-            serialize(&config_settings_.A1_series_capacitance
-                      [A1_series_resistor_index_], sizeof(float));
-            break;
-          default:
-            return_code_ = RETURN_BAD_INDEX;
-            break;
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_SERIES_CAPACITANCE:
-      if (payload_length() == sizeof(uint8_t) + sizeof(float)) {
-        uint8_t channel = read_uint8();
-        return_code_ = RETURN_OK;
-        switch(channel) {
-          case 0:
-            config_settings_.A0_series_capacitance[A0_series_resistor_index_] =
-                read_float();
-            save_config();
-            break;
-          case 1:
-            config_settings_.A1_series_capacitance[A1_series_resistor_index_] =
-                read_float();
-            save_config();
-            break;
-          default:
-            return_code_ = RETURN_BAD_INDEX;
-            break;
-        }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_AMPLIFIER_GAIN:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        serialize(&amplifier_gain_, sizeof(amplifier_gain_));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_AMPLIFIER_GAIN:
-      if (payload_length() == sizeof(float)) {
-        float value = read_float();
-        if (value > 0) {
-          if (auto_adjust_amplifier_gain_) {
-            amplifier_gain_ = value;
+
+      // `hv_resistor == -1` if the smallest series resistor becomes saturated.
+      if (fb_resistor != -1) {
+        fb = analogRead(1);
+
+        // If the ADC is saturated, use a smaller resistor and reset the peak.
+        if (fb > 820) {
+          if (A1_series_resistor_index_ > 0) {
+            set_series_resistor(1, A1_series_resistor_index_ - 1);
+            fb_max = 0;
+            fb_min = 1023;
           } else {
-            config_settings_.amplifier_gain = value;
-            auto_adjust_amplifier_gain_ = false;
-            save_config();
+            fb_resistor = -1;
           }
-          return_code_ = RETURN_OK;
-        } else {
-          return_code_ = RETURN_BAD_VALUE;
+          continue;
         }
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_AUTO_ADJUST_AMPLIFIER_GAIN:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t value = config_settings_.amplifier_gain <= 0;
-        serialize(&value, sizeof(value));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_AUTO_ADJUST_AMPLIFIER_GAIN:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t value = read_uint8();
-        if (value > 0) {
-          config_settings_.amplifier_gain = 0;
-        } else {
-          config_settings_.amplifier_gain = amplifier_gain_;
+        if (fb > fb_max) {
+          fb_max = fb;
         }
-        save_config();
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_MEASURE_IMPEDANCE:
-      if (payload_length() < 3*sizeof(uint16_t)) {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      } else {
-        uint16_t sampling_time_ms = read_uint16();
-        uint16_t n_samples = read_uint16();
-        uint16_t delay_between_samples_ms = read_uint16();
-
-        // only collect enough samples to fill the maximum payload length
-        uint16_t max_samples = MAX_PAYLOAD_LENGTH /
-                               (2 * sizeof(int8_t) + 2 * sizeof(int16_t));
-        if (n_samples > max_samples) {
-          n_samples = max_samples;
+        if (fb < fb_min) {
+          fb_min = fb;
         }
+      }
+    }
 
-        if (payload_length() == 3 * sizeof(uint16_t) || (payload_length() == 3 *
-                                                        sizeof(uint16_t) +
-                                                        number_of_channels_ *
-                                                        sizeof(uint8_t))) {
-          return_code_ = RETURN_OK;
+    hv_pk_pk = hv_max - hv_min;
+    fb_pk_pk = fb_max - fb_min;
 
-          uint8_t original_A0_index = A0_series_resistor_index_;
-          uint8_t original_A1_index = A1_series_resistor_index_;
+    /* If we didn't get a valid feedback sample during the sampling
+     * time, return -1 as the index. */
+    if (fb_max == 0 || (fb_min == 1023 && fb_resistor != -1)) {
+      fb_resistor = -1;
+    } else {
+      fb_resistor = A1_series_resistor_index_;
+    }
 
-          // set the resistors to their highest values
-          set_series_resistor(0, sizeof(config_settings_.A0_series_resistance) /
-                            sizeof(float) - 1);
-          set_series_resistor(1, sizeof(config_settings_.A1_series_resistance) /
-                            sizeof(float) - 1);
-
-          // update the channels (if they were included in the packet)
-          if (payload_length() == 3 * sizeof(uint16_t) + number_of_channels_ *
-              sizeof(uint8_t)) {
-            update_all_channels();
-          }
-
-          // sample the feedback voltage
-          for (uint16_t i = 0; i < n_samples; i++) {
-            uint16_t hv_max = 0;
-            uint16_t hv_min = 1023;
-            uint16_t hv = 0;
-            int16_t hv_pk_pk;
-            int8_t hv_resistor = A0_series_resistor_index_;
-            uint16_t fb_max = 0;
-            uint16_t fb_min = 1023;
-            uint16_t fb = 0;
-            int16_t fb_pk_pk;
-            int8_t fb_resistor = A1_series_resistor_index_;
-            uint32_t t_sample = millis();
-
-            while (millis() - t_sample < sampling_time_ms) {
-              // hv_resistor == -1 if the smallest series resistor becomes
-              // saturated
-              if (hv_resistor != -1) {
-                hv = analogRead(0);
-                // if the ADC is saturated, use a smaller resistor
-                // and reset the peak
-                if (hv > 820) {
-                  if (A0_series_resistor_index_ > 0) {
-                    set_series_resistor(0, A0_series_resistor_index_ - 1);
-                    hv_max = 0;
-                    hv_min = 1023;
-                  } else {
-                    hv_resistor = -1;
-                  }
-                  continue;
-                }
-                if (hv > hv_max) {
-                  hv_max = hv;
-                }
-                if (hv < hv_min) {
-                  hv_min = hv;
-                }
-              }
-
-              // hv_resistor == -1 if the smallest series resistor becomes
-              // saturated
-              if (fb_resistor != -1) {
-                fb = analogRead(1);
-
-                // if the ADC is saturated, use a smaller resistor
-                // and reset the peak
-                if (fb > 820) {
-                  if (A1_series_resistor_index_ > 0) {
-                    set_series_resistor(1, A1_series_resistor_index_ - 1);
-                    fb_max = 0;
-                    fb_min = 1023;
-                  } else {
-                    fb_resistor = -1;
-                  }
-                  continue;
-                }
-                if (fb > fb_max) {
-                  fb_max = fb;
-                }
-                if (fb < fb_min) {
-                  fb_min = fb;
-                }
-              }
-            }
-
-            hv_pk_pk = hv_max - hv_min;
-            fb_pk_pk = fb_max - fb_min;
-
-            // if we didn't get a valid feedback sample during the sampling
-            // time, return -1 as the index
-            if (fb_max == 0 || (fb_min == 1023 && fb_resistor != -1)) {
-              fb_resistor = -1;
-            } else {
-              fb_resistor = A1_series_resistor_index_;
-            }
-
-            // if we didn't get a valid high voltage sample during the
-            // sampling time, return -1 as the index
-            if (hv_max == 0 || (hv_min == 1023 && hv_resistor != -1)) {
-              hv_resistor = -1;
-            } else {
-              // adjust amplifier gain (only if the hv resistor is the same
-              // as on the previous reading; otherwise it may not have had
-              // enough time to get a good reading)
-              if (auto_adjust_amplifier_gain_ && waveform_voltage_ > 0 && i > 0
-                  && hv_resistor == A0_series_resistor_index_) {
-                float R = config_settings_.A0_series_resistance
-                                           [A0_series_resistor_index_];
-                float C = config_settings_.A0_series_capacitance
-                                           [A0_series_resistor_index_];
-                float measured_voltage, set_voltage;
+    /* If we didn't get a valid high voltage sample during the sampling time,
+     * return -1 as the index. */
+    if (hv_max == 0 || (hv_min == 1023 && hv_resistor != -1)) {
+      hv_resistor = -1;
+    } else {
+      /* Adjust amplifier gain (only if the hv resistor is the same as on the
+       * previous reading; otherwise it may not have had enough time to get a
+       * good reading). */
+      if (auto_adjust_amplifier_gain_ && waveform_voltage_ > 0 && i > 0
+          && hv_resistor == A0_series_resistor_index_) {
+        float R = config_settings_.A0_series_resistance
+                                   [A0_series_resistor_index_];
+        float C = config_settings_.A0_series_capacitance
+                                   [A0_series_resistor_index_];
+        float measured_voltage, set_voltage;
 #if ___HARDWARE_MAJOR_VERSION___ == 1
-                float V_fb;
-                if (fb_resistor == - 1 || fb_pk_pk < 0) {
-                  V_fb = 0;
-                } else {
-                  V_fb = fb_pk_pk * 5.0 / 1023 / sqrt(2) / 2;
-                }
-                measured_voltage = (hv_pk_pk * 5.0 / 1023.0 // measured Vrms /
-                                    / sqrt(2) / 2) /
-                                   (1 / sqrt(pow(10e6 / R   // transfer
-                                                 + 1, 2)    // function
-                                             + pow(10e6 * C * 2 * M_PI *
-                                                   waveform_frequency_, 2)));
-                set_voltage = waveform_voltage_ + V_fb;
+        float V_fb;
+        if (fb_resistor == - 1 || fb_pk_pk < 0) {
+          V_fb = 0;
+        } else {
+          V_fb = fb_pk_pk * 5.0 / 1023 / sqrt(2) / 2;
+        }
+        measured_voltage = (hv_pk_pk * 5.0 / 1023.0 // measured Vrms /
+                            / sqrt(2) / 2) /
+                           (1 / sqrt(pow(10e6 / R   // transfer
+                                         + 1, 2)    // function
+                                     + pow(10e6 * C * 2 * M_PI *
+                                           waveform_frequency_, 2)));
+        set_voltage = waveform_voltage_ + V_fb;
 #else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-                measured_voltage = (hv_pk_pk * 5.0 / 1023.0  // measured Vrms /
-                                    / sqrt(2) / 2) /
-                                   (1 / sqrt(pow(10e6 / R,   // transfer
-                                                 2) +        // function
-                                             pow(10e6 * C * 2 * M_PI *
-                                                 waveform_frequency_, 2)));
-                set_voltage = waveform_voltage_;
+        measured_voltage = (hv_pk_pk * 5.0 / 1023.0  // measured Vrms /
+                            / sqrt(2) / 2) /
+                           (1 / sqrt(pow(10e6 / R,   // transfer
+                                         2) +        // function
+                                     pow(10e6 * C * 2 * M_PI *
+                                         waveform_frequency_, 2)));
+        set_voltage = waveform_voltage_;
 #endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
-                // if we're outside of the voltage tolerance, update the gain
-                if (abs(measured_voltage - set_voltage) >
-                    config_settings_.voltage_tolerance) {
-                  amplifier_gain_ *= measured_voltage / set_voltage;
+        // If we're outside of the voltage tolerance, update the gain.
+        if (abs(measured_voltage - set_voltage) >
+            config_settings_.voltage_tolerance) {
+          amplifier_gain_ *= measured_voltage / set_voltage;
 
-                  // enforce minimum gain of 1 because if gain goes to zero,
-                  // it cannot be adjusted further
-                  if (amplifier_gain_ < 1) {
-                    amplifier_gain_ = 1;
-                  }
+          /* Enforce minimum gain of 1 because if gain goes to zero, it cannot
+           * be adjusted further. */
+          if (amplifier_gain_ < 1) {
+            amplifier_gain_ = 1;
+          }
 #if ___HARDWARE_MAJOR_VERSION___ == 1
-                  // update output voltage (accounting for amplifier gain and
-                  // for the voltage drop across the feedback resistor)
-                  set_waveform_voltage(waveform_voltage_ + V_fb);
+          /* Update output voltage (accounting for amplifier gain and for the
+           * voltage drop across the feedback resistor). */
+          set_waveform_voltage(waveform_voltage_ + V_fb);
 #else   // #if ___HARDWARE_MAJOR_VERSION___ == 1
-                  // update output voltage (but don't wait for i2c response)
-                  set_waveform_voltage(waveform_voltage_, false);
+          // Update output voltage (but don't wait for i2c response).
+          set_waveform_voltage(waveform_voltage_, false);
 #endif // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
-                }
-              }
-              hv_resistor = A0_series_resistor_index_;
-            }
-
-            serialize(&hv_pk_pk, sizeof(hv_pk_pk));
-            serialize(&hv_resistor, sizeof(hv_resistor));
-            serialize(&fb_pk_pk, sizeof(fb_pk_pk));
-            serialize(&fb_resistor, sizeof(fb_resistor));
-
-            if (Serial.available() > 0) {
-              break;
-            }
-
-            uint32_t t_delay = millis();
-            while (millis() - t_delay < delay_between_samples_ms) {}
-          }
-
-          // set the resistors back to their original states
-          set_series_resistor(0, original_A0_index);
-          set_series_resistor(1, original_A1_index);
-        } else {
-          return_code_ = RETURN_BAD_PACKET_SIZE;
         }
       }
-      break;
-    case CMD_RESET_CONFIG_TO_DEFAULTS:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        load_config(true);
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#if (___HARDWARE_MAJOR_VERSION___ == 1 && ___HARDWARE_MINOR_VERSION___ > 1) ||\
-        ___HARDWARE_MAJOR_VERSION___ == 2
-    case CMD_GET_POWER_SUPPLY_PIN:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t power_supply_pin = POWER_SUPPLY_ON_PIN_;
-        serialize(&power_supply_pin, sizeof(power_supply_pin));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#endif
-    case CMD_GET_WATCHDOG_ENABLED:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t value = watchdog_enabled();
-        serialize(&value, sizeof(value));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_WATCHDOG_ENABLED:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t value = read_uint8();
-        if (value > 0) {
-          watchdog_enabled(true);
-        } else {
-          watchdog_enabled(false);
-        }
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_GET_WATCHDOG_STATE:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t value = watchdog_state();
-        serialize(&value, sizeof(value));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_WATCHDOG_STATE:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t value = read_uint8();
-        if (value > 0) {
-          watchdog_state(true);
-        } else {
-          watchdog_state(false);
-        }
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#ifdef ATX_POWER_SUPPLY
-    case CMD_GET_ATX_POWER_STATE:
-      if (payload_length() == 0) {
-        return_code_ = RETURN_OK;
-        uint8_t value = atx_power_state();
-        serialize(&value, sizeof(value));
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-    case CMD_SET_ATX_POWER_STATE:
-      if (payload_length() == sizeof(uint8_t)) {
-        uint8_t value = read_uint8();
-        if (value > 0) {
-          atx_power_on();
-        } else {
-          atx_power_off();
-        }
-        return_code_ = RETURN_OK;
-      } else {
-        return_code_ = RETURN_BAD_PACKET_SIZE;
-      }
-      break;
-#endif  // ATX_POWER_SUPPLY
-#endif  // #ifdef AVR
+      hv_resistor = A0_series_resistor_index_;
+    }
+
+    /* TODO: Write sampled values to a return value, rather than writing to a
+     * generic payload array. */
+    serialize(&hv_pk_pk, sizeof(hv_pk_pk));
+    serialize(&hv_resistor, sizeof(hv_resistor));
+    serialize(&fb_pk_pk, sizeof(fb_pk_pk));
+    serialize(&fb_resistor, sizeof(fb_resistor));
+
+    if (Serial.available() > 0) {
+      return 0;
+    }
+
+    uint32_t t_delay = millis();
+    while (millis() - t_delay < delay_between_samples_ms) {}
   }
-  RemoteObject::process_command(cmd);
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-  if (return_code_ == RETURN_UNKNOWN_COMMAND) {
-    log_error("Unrecognized command", function_name);
-  }
-#endif
-  return return_code_;
+
+  // set the resistors back to their original states
+  set_series_resistor(0, original_A0_index);
+  set_series_resistor(1, original_A1_index);
 }
+
 
 #if defined(AVR) || defined(__SAM3X8E__)
 ///////////////////////////////////////////////////////////////////////////////
