@@ -40,6 +40,7 @@ public:
   uint8_t pot(uint8_t index) const { return board_.pot(index); }
   float waveform_frequency() const { return board_.waveform_frequency(); }
   float waveform_voltage() const { return board_.waveform_voltage(); }
+  uint8_t i2c_address() const { return board_.i2c_address(); }
   void set_pot(uint8_t address, uint8_t level, bool save_to_eeprom) {
     board_.set_pot(address, level, save_to_eeprom);
   }
@@ -54,7 +55,7 @@ public:
     board_.set_hf_amplitude_correction(correction);
   }
   float vout_pk_pk() { return board_.vout_pk_pk(); }
-  void reset_config() { board_.LoadConfig(true); }
+  void load_config(bool use_defaults) { board_.LoadConfig(use_defaults); }
   uint16_t config_version(uint8_t position) {
     switch (position) {
       case 0:

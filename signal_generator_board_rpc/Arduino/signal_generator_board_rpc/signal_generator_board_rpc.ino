@@ -68,13 +68,6 @@ void setup() {
   packet.reset_buffer(PACKET_SIZE, &packet_buffer[0]);
   parser.reset(&packet);
 #endif  // #ifndef DISABLE_SERIAL
-  pinMode(SS, OUTPUT);
-  pinMode(OE, OUTPUT);
-  pinMode(SRCLR, OUTPUT);
-  SPI.begin();
-  digitalWrite(SS, HIGH);
-  digitalWrite(SRCLR, HIGH);
-  digitalWrite(OE, LOW);
 }
 
 

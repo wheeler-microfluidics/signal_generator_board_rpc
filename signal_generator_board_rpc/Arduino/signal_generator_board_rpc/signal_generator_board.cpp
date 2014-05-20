@@ -32,16 +32,9 @@ void SignalGeneratorClass::begin() {
   SPI.setBitOrder(MSBFIRST);
   SPI.setDataMode(SPI_MODE0);
   SPI.begin();
-  Serial.begin(115200);
   LoadConfig();
   set_waveform_frequency(1000);
   set_waveform_voltage(0);
-  Serial.print(P("ram=")); Serial.println(ram_size(), DEC);
-  Serial.print(P(".data=")); Serial.println(data_size(), DEC);
-  Serial.print(P(".bss=")); Serial.println(bss_size(), DEC);
-  Serial.print(P("heap=")); Serial.println(heap_size(), DEC);
-  Serial.print(P("stack=")); Serial.println(stack_size(), DEC);
-  Serial.print(P("free memory=")); Serial.println(free_memory(), DEC);
 }
 
 #if 0
