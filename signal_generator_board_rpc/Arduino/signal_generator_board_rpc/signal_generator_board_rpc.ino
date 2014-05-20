@@ -8,6 +8,7 @@
 #include "CommandPacketHandler.h"
 #include "NodeCommandProcessor.h"
 #include "packet_handler.h"
+#include "signal_generator_board.h"
 
 //#define DISABLE_I2C
 //#define DISABLE_SERIAL
@@ -26,8 +27,8 @@ uint8_t i2c_response_size_sent = false;
 FixedPacket i2c_packet;
 #endif
 
-DMFControlBoard dmf_control_board;
-Node node(dmf_control_board);
+SignalGeneratorClass signal_generator_board;
+Node node(signal_generator_board);
 CommandProcessor<Node> command_processor(node);
 
 #ifndef DISABLE_SERIAL
@@ -47,7 +48,7 @@ Reactor reactor(parser, Serial, handler);
 
 
 void setup() {
-  dmf_control_board.begin();
+  signal_generator_board.begin();
 #ifndef DISABLE_I2C
 #ifdef __AVR_ATmega2560__
   /* Join I2C bus as master. */

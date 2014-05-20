@@ -6,29 +6,29 @@ from paver.setuputils import setup, find_package_data
 
 import version
 sys.path.append(path('.').abspath())
-from dmf_control_board_rpc import get_sketch_directory, package_path
+from signal_generator_board_rpc import get_sketch_directory, package_path
 from arduino_rpc.proto import CodeGenerator
 
 
-dmf_control_board_rpc_files = find_package_data(package=
-                                                'dmf_control_board_rpc',
-                                                where= 'dmf_control_board_rpc',
+signal_generator_board_rpc_files = find_package_data(package=
+                                                'signal_generator_board_rpc',
+                                                where= 'signal_generator_board_rpc',
                                                 only_in_packages=False)
-pprint(dmf_control_board_rpc_files)
+pprint(signal_generator_board_rpc_files)
 
 PROTO_PREFIX = 'commands'
 
 DEFAULT_ARDUINO_BOARDS = ['uno']
 
-setup(name='wheeler.dmf_control_board_rpc',
+setup(name='wheeler.signal_generator_board_rpc',
       version=version.getVersion(),
       description='Arduino RPC node packaged as Python package.',
       author='Christian Fobel',
       author_email='christian@fobel.net',
-      url='http://github.com/wheeler-microfluidics/dmf_control_board_rpc.git',
+      url='http://github.com/wheeler-microfluidics/signal_generator_board_rpc.git',
       license='GPLv2',
-      packages=['dmf_control_board_rpc'],
-      package_data=dmf_control_board_rpc_files)
+      packages=['signal_generator_board_rpc'],
+      package_data=signal_generator_board_rpc_files)
 
 
 @task

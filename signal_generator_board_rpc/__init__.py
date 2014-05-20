@@ -3,7 +3,10 @@ from collections import OrderedDict
 import nadamq
 from path_helpers import path
 
-from .board import DMFControlBoard
+try:
+    from .board import SignalGeneratorBoard
+except ImportError:
+    pass
 
 
 def package_path():
