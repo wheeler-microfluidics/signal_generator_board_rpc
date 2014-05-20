@@ -68,10 +68,10 @@ public:
   uint8_t set_pot(uint8_t index, uint8_t value) {
     return board_.set_pot(index, value);
   }
-  uint8_t set_series_resistor_index(const uint8_t channel, const uint8_t index) {
+  int8_t set_series_resistor_index(uint8_t index, uint8_t channel) {
     return board_.set_series_resistor(channel, index);
   }
-  int8_t series_resistor_index(const uint8_t channel) {
+  int8_t series_resistor_index(uint8_t channel) {
     switch(channel) {
       case 0:
         return board_.A0_series_resistor_index_;
@@ -88,54 +88,14 @@ public:
   void load_config(bool use_defaults=false);
   void save_config();
 #endif
+  float waveform_voltage() const { return board_.waveform_voltage(); }
   int8_t set_waveform_voltage(float output_vrms, bool wait_for_reply=true) {
-#if ___HARDWARE_MAJOR_VERSION___==1
-    /* Return waveform-voltage from signal-generator board. */
-    float step = output_vrms / board_.amplifier_gain_ * 2 * sqrt(2) / 4 * 255;
-    if (output_vrms < 0 || step > 255) {
-      return -1;
-    } else {
-      board_.waveform_voltage_ = output_vrms;
-      board_.set_pot(board_.POT_INDEX_WAVEOUT_GAIN_2_, step);
-      return 0;
-    }
-#else
-    /* ## TODO ##
-     *
-     * Set waveform-voltage on signal-generator board. */
-#endif
-    return 0;
+    return board_.set_waveform_voltage(output_vrms, wait_for_reply);
   }
 
+  float waveform_frequency() const { return board_.waveform_frequency(); }
   int8_t set_waveform_frequency(float frequency) {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-        // The frequency of the LTC6904 oscillator needs to be set to 50x the
-        // fundamental frequency
-        board_.waveform_frequency_ = frequency;
-        float freq = board_.waveform_frequency_ * 50;
-        // valid frequencies are 1kHz to 68MHz
-        if (freq < 1e3 || freq > 68e6) {
-          return -1;
-        } else {
-          uint8_t oct = 3.322 * log(freq / 1039) / log(10);
-          uint16_t dac = round(2048 - (2078 * pow(2, 10 + oct)) / freq);
-          uint8_t cnf = 2; // CLK on, /CLK off
-          // msb = OCT3 OCT2 OCT1 OCT0 DAC9 DAC8 DAC7 DAC6
-          uint8_t msb = (oct << 4) | (dac >> 6);
-          // lsb =  DAC5 DAC4 DAC3 DAC2 DAC1 DAC0 CNF1 CNF0
-          uint8_t lsb = (dac << 2) | cnf;
-          Wire.beginTransmission(board_.LTC6904_);
-          Wire.write(msb);
-          Wire.write(lsb);
-          Wire.endTransmission();     // stop transmitting
-          return 0;
-        }
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-    /* ## TODO ##
-     *
-     * Set waveform-frequency on signal-generator board. */
-#endif
-    return 0;
+    return board_.set_waveform_frequency(frequency);
   }
 
   uint8_t set_adc_prescaler(const uint8_t index) {
@@ -166,40 +126,11 @@ public:
   }
 
 #if ___HARDWARE_MAJOR_VERSION___ == 1
-  uint8_t waveform() const {
-    return digitalRead(board_.WAVEFORM_SELECT_);
-  }
-
-  void set_waveform(uint16_t waveform_type) {
-    if (waveform == board_.SINE || waveform == board_.SQUARE) {
-      digitalWrite(board_.WAVEFORM_SELECT_, waveform_type);
-    }
+  uint8_t waveform() const { return board_.waveform(); }
+  int8_t set_waveform(uint16_t waveform_type) {
+    board_.set_waveform(waveform_type);
   }
 #endif  //#if ___HARDWARE_MAJOR_VERSION___ == 1
-
-  float waveform_voltage() const {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-  /* No signal generator board, so just return local waveform-voltage. */
-    return board_.waveform_voltage_;
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-  /* ## TODO ##
-   *
-   * Return waveform-voltage from signal-generator board. */
-    return 0;
-#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-  }
-
-  float waveform_frequency() const {
-#if ___HARDWARE_MAJOR_VERSION___ == 1
-  /* No signal generator board, so just return local waveform-voltage. */
-    return board_.waveform_frequency;
-#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-  /* ## TODO ##
-   *
-   * Return waveform-frequency from signal-generator board. */
-    return 0;
-#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1
-  }
 
 #ifdef AVR // only on Arduino Mega 2560
   float sampling_rate() const {
@@ -210,104 +141,30 @@ public:
 #endif
 
   float series_resistance(uint8_t channel) {
-    switch(channel) {
-      case 0:
-        return board_.config_settings_.A0_series_resistance
-          [board_.A0_series_resistor_index_];
-        break;
-      case 1:
-        return board_.config_settings_.A1_series_resistance
-          [board_.A1_series_resistor_index_];
-        break;
-      default:
-        break;
-    }
-    return -1;
+    return board_.series_resistance(channel);
   }
 
   int8_t set_series_resistance(uint8_t channel, float value) {
-    switch(channel) {
-      case 0:
-        board_.config_settings_.A0_series_resistance
-          [board_.A0_series_resistor_index_] = value;
-        board_.save_config();
-        return 0;
-        break;
-      case 1:
-        board_.config_settings_.A1_series_resistance
-          [board_.A1_series_resistor_index_] = value;
-        board_.save_config();
-        return 0;
-        break;
-      default:
-        break;
-    }
-    return -1;
+    return board_.set_series_resistance(channel, value);
   }
 
   float series_capacitance(uint8_t channel) {
-    switch(channel) {
-      case 0:
-        return board_.config_settings_.A0_series_capacitance
-          [board_.A0_series_resistor_index_];
-        break;
-      case 1:
-        return board_.config_settings_.A1_series_capacitance
-          [board_.A1_series_resistor_index_];
-        break;
-      default:
-        break;
-    }
-    return -1;
+    return board_.series_capacitance(channel);
   }
 
   int8_t set_series_capacitance(uint8_t channel, float value) {
-    switch(channel) {
-      case 0:
-        board_.config_settings_.A0_series_capacitance
-          [board_.A0_series_resistor_index_] = value;
-        board_.save_config();
-        return 0;
-        break;
-      case 1:
-        board_.config_settings_.A1_series_capacitance
-          [board_.A1_series_resistor_index_] = value;
-        board_.save_config();
-        return 0;
-        break;
-      default:
-        break;
-    }
-    return -1;
+    return board_.set_series_capacitance(channel, value);
   }
 
   float amplifier_gain() const { return board_.amplifier_gain_; }
-
-  void set_amplifier_gain(float value) {
-    if (value > 0) {
-      if (board_.auto_adjust_amplifier_gain_) {
-        board_.amplifier_gain_ = value;
-      } else {
-        board_.config_settings_.amplifier_gain = value;
-        board_.auto_adjust_amplifier_gain_ = false;
-        board_.save_config();
-      }
-    }
-  }
+  void set_amplifier_gain(float value) { board_.set_amplifier_gain(value); }
 
   bool auto_adjust_amplifier_gain() const {
-    return board_.config_settings_.amplifier_gain <= 0;
+    return board_.auto_adjust_amplifier_gain();
   }
 
   void set_auto_adjust_amplifier_gain(bool value) {
-    if (value) {
-      board_.config_settings_.amplifier_gain = 0;
-    } else {
-      board_.config_settings_.amplifier_gain = board_.amplifier_gain_;
-    }
-    /* Trigger enabling of auto-adjust amplifier gain based on rules in
-     * `save_config`. */
-    board_.save_config();
+    board_.set_auto_adjust_amplifier_gain(value);
   }
 
   float measure_impedance(uint16_t sampling_time_ms, uint16_t n_samples,

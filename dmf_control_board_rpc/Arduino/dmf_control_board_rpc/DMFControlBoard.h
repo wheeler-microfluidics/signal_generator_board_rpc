@@ -20,17 +20,9 @@ along with dmf_control_board.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef _DMF_CONTROL_BOARD_H_
 #define _DMF_CONTROL_BOARD_H_
 
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-  #include <iostream>
-  #include <fstream>
-  #include <string>
-  #include <vector>
-  #include <stdint.h>
-  #include <stdexcept>
-#else
-  #include "Arduino.h"
-  #include "Config.h"
-#endif
+#include "Arduino.h"
+#include "Wire.h"
+#include "Config.h"
 #include "RemoteObject.h"
 
 #if (___HARDWARE_MAJOR_VERSION___ == 1 && ___HARDWARE_MINOR_VERSION___ > 1) ||\
@@ -51,6 +43,7 @@ public:
   #elif ___HARDWARE_MAJOR_VERSION___ == 2
     static const uint8_t POWER_SUPPLY_ON_PIN_ = 2;
   #endif
+  static const int8_t RETURN_BAD_VALUE_S = -1;
 
   struct version_t {
     uint16_t major;
@@ -58,7 +51,6 @@ public:
     uint16_t micro;
   };
 
-#if defined(AVR) || defined(__SAM3X8E__)
   struct watchdog_t {
     /* # `watchdog_t` #
      *
@@ -134,11 +126,10 @@ public:
     /**\brief voltage tolerance for amplifier gain adjustment.*/
     float voltage_tolerance;
   };
-#endif  // #ifdef AVR
 
   // TODO:
   //  Eventually, all of these variables should defined only on the arduino.
-  //  The PC can interogate device using CMD_GET_NUMBER_OF_ADC_CHANNELS
+  //  The PC can interrogate device using `CMD_GET_NUMBER_OF_ADC_CHANNELS`.
   static const uint8_t NUMBER_OF_ADC_CHANNELS = 2;
 
   // Accessors and mutators
@@ -193,130 +184,6 @@ public:
   DMFControlBoard();
   ~DMFControlBoard();
 
-// In our case, the PC is the only one sending commands
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-  virtual std::string command_label(uint8_t command) const {
-    try {
-      return RemoteObject::command_label(command);
-    } catch (...) {
-      if (command == CMD_GET_NUMBER_OF_CHANNELS) {
-        return std::string("CMD_GET_NUMBER_OF_CHANNELS");
-      } else if (command == CMD_GET_STATE_OF_ALL_CHANNELS) {
-        return std::string("CMD_GET_STATE_OF_ALL_CHANNELS");
-      } else if (command == CMD_SET_STATE_OF_ALL_CHANNELS) {
-        return std::string("CMD_SET_STATE_OF_ALL_CHANNELS");
-      } else if (command == CMD_GET_STATE_OF_CHANNEL) {
-        return std::string("CMD_GET_STATE_OF_CHANNEL");
-      } else if (command == CMD_SET_STATE_OF_CHANNEL) {
-        return std::string("CMD_SET_STATE_OF_CHANNEL");
-      } else if (command == CMD_GET_WAVEFORM) {
-        return std::string("CMD_GET_WAVEFORM");
-      } else if (command == CMD_SET_WAVEFORM) {
-        return std::string("CMD_SET_WAVEFORM");
-      } else if (command == CMD_GET_WAVEFORM_VOLTAGE) {
-        return std::string("CMD_GET_WAVEFORM_VOLTAGE");
-      } else if (command == CMD_SET_WAVEFORM_VOLTAGE) {
-        return std::string("CMD_SET_WAVEFORM_VOLTAGE");
-      } else if (command == CMD_GET_WAVEFORM_FREQUENCY) {
-        return std::string("CMD_GET_WAVEFORM_FREQUENCY");
-      } else if (command == CMD_SET_WAVEFORM_FREQUENCY) {
-        return std::string("CMD_SET_WAVEFORM_FREQUENCY");
-      } else if (command == CMD_GET_SAMPLING_RATE) {
-        return std::string("CMD_GET_SAMPLING_RATE");
-      } else if (command == CMD_SET_SAMPLING_RATE) {
-        return std::string("CMD_SET_SAMPLING_RATE");
-      } else if (command == CMD_GET_SERIES_RESISTOR_INDEX) {
-        return std::string("CMD_GET_SERIES_RESISTOR_INDEX");
-      } else if (command == CMD_SET_SERIES_RESISTOR_INDEX) {
-        return std::string("CMD_SET_SERIES_RESISTOR_INDEX");
-      } else if (command == CMD_GET_SERIES_RESISTANCE) {
-        return std::string("CMD_GET_SERIES_RESISTANCE");
-      } else if (command == CMD_SET_SERIES_RESISTANCE) {
-        return std::string("CMD_SET_SERIES_RESISTANCE");
-      } else if (command == CMD_GET_SERIES_CAPACITANCE) {
-        return std::string("CMD_GET_SERIES_CAPACITANCE");
-      } else if (command == CMD_SET_SERIES_CAPACITANCE) {
-        return std::string("CMD_SET_SERIES_CAPACITANCE");
-      } else if (command == CMD_GET_AMPLIFIER_GAIN) {
-        return std::string("CMD_GET_AMPLIFIER_GAIN");
-      } else if (command == CMD_SET_AMPLIFIER_GAIN) {
-        return std::string("CMD_SET_AMPLIFIER_GAIN");
-      } else if (command == CMD_GET_AUTO_ADJUST_AMPLIFIER_GAIN) {
-        return std::string("CMD_GET_AUTO_ADJUST_AMPLIFIER_GAIN");
-      } else if (command == CMD_SET_AUTO_ADJUST_AMPLIFIER_GAIN) {
-        return std::string("CMD_SET_AUTO_ADJUST_AMPLIFIER_GAIN");
-      } else if (command == CMD_GET_POWER_SUPPLY_PIN) {
-        return std::string("CMD_GET_POWER_SUPPLY_PIN");
-      } else if (command == CMD_GET_WATCHDOG_STATE) {
-        return std::string("CMD_GET_WATCHDOG_STATE");
-      } else if (command == CMD_SET_WATCHDOG_STATE) {
-        return std::string("CMD_SET_WATCHDOG_STATE");
-      } else if (command == CMD_GET_WATCHDOG_ENABLED) {
-        return std::string("CMD_GET_WATCHDOG_ENABLED");
-      } else if (command == CMD_SET_WATCHDOG_ENABLED) {
-        return std::string("CMD_SET_WATCHDOG_ENABLED");
-      } else if (command == CMD_GET_ATX_POWER_STATE) {
-        return std::string("CMD_GET_ATX_POWER_STATE");
-      } else if (command == CMD_SET_ATX_POWER_STATE) {
-        return std::string("CMD_SET_ATX_POWER_STATE");
-      } else {
-        throw std::runtime_error("Invalid command.");
-      }
-    }
-  }
-
-  uint16_t number_of_channels();
-  std::vector<uint8_t> state_of_all_channels();
-  uint8_t state_of_channel(const uint16_t channel);
-  float sampling_rate();
-  uint8_t series_resistor_index(const uint8_t channel);
-  float series_resistance(const uint8_t channel);
-  float series_capacitance(const uint8_t channel);
-  std::string waveform();
-  float waveform_frequency();
-  float waveform_voltage();
-  float amplifier_gain();
-  bool auto_adjust_amplifier_gain();
-  uint8_t power_supply_pin();
-  bool watchdog_state();
-  bool watchdog_enabled();
-  bool atx_power_state();
-
-  // Remote mutators (return code is from reply packet)
-  uint8_t set_state_of_channel(const uint16_t channel, const uint8_t state);
-  uint8_t set_state_of_all_channels(const std::vector<uint8_t> state);
-  uint8_t set_waveform_voltage(const float v_rms);
-  uint8_t set_waveform_frequency(const float freq_hz);
-  uint8_t set_waveform(bool waveform);
-  uint8_t set_sampling_rate(const uint8_t sampling_rate);
-  uint8_t set_series_resistor_index(const uint8_t channel,
-                                    const uint8_t index);
-  uint8_t set_series_resistance(const uint8_t channel,
-                                float resistance);
-  uint8_t set_series_capacitance(const uint8_t channel,
-                                 float capacitance);
-  uint8_t set_amplifier_gain(float gain);
-  uint8_t set_auto_adjust_amplifier_gain(bool on);
-  uint8_t set_watchdog_state(bool state);
-  uint8_t set_watchdog_enabled(bool state);
-  uint8_t set_atx_power_state(bool state);
-
-  // other functions
-  void measure_impedance_non_blocking(uint16_t sampling_time_ms,
-                                      uint16_t n_samples,
-                                      uint16_t delay_between_samples_ms,
-                                      const std::vector<uint8_t> state);
-  std::vector<float> get_impedance_data();
-  std::vector<float> measure_impedance(uint16_t sampling_time_ms,
-                                       uint16_t n_samples,
-                                       uint16_t delay_between_samples_ms,
-                                       const std::vector<uint8_t> state);
-  uint8_t reset_config_to_defaults();
-  std::string host_name() { return NAME_; }
-  std::string host_manufacturer() { return MANUFACTURER_; }
-  std::string host_software_version() { return SOFTWARE_VERSION_; }
-  std::string host_url() { return URL_; }
-#else  // #ifndef AVR
   void begin();
 
   // local accessors
@@ -372,10 +239,8 @@ public:
 
   /* Expose to allow timer callback to check state. */
   watchdog_t watchdog_;
-#endif  // #ifndef AVR
 
   // private functions
-#if defined(AVR) || defined(__SAM3X8E__)
   uint8_t update_channel(const uint16_t channel, const uint8_t state);
   void update_all_channels();
   void send_spi(uint8_t pin, uint8_t address, uint8_t data);
@@ -385,16 +250,178 @@ public:
   void load_config(bool use_defaults=false);
   void save_config();
   version_t config_version();
-  uint8_t set_waveform_voltage(const float output_vrms,
-                               const bool wait_for_reply=true);
+  int8_t set_waveform_voltage(const float output_vrms,
+                              const bool wait_for_reply=true);
+  float waveform_voltage() {
+#if ___HARDWARE_MAJOR_VERSION___ == 1
+    return waveform_voltage_;
+#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
+    i2c_write(config_settings_.signal_generator_board_i2c_address,
+              CMD_GET_WAVEFORM_VOLTAGE);
+    delay(I2C_DELAY);
+    Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
+                     (uint8_t)1);
+    if (Wire.available()) {
+      uint8_t n_bytes_to_read = Wire.read();
+      if (n_bytes_to_read == sizeof(float) + 1) {
+        uint8_t data[5];
+        i2c_read(config_settings_.signal_generator_board_i2c_address,
+                 (uint8_t *)&data[0], 5);
+        return_code_ = data[4];
+        if (return_code_ == RETURN_OK) {
+          memcpy(&waveform_voltage_, &data[0], sizeof(float));
+          waveform_voltage_ *= amplifier_gain_;
+          return waveform_voltage_;
+        }
+      }
+    }
+    return RETURN_BAD_VALUE_S;
+#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
+  }
+  int8_t set_waveform_frequency(float frequency);
+  float waveform_frequency() {
+#if ___HARDWARE_MAJOR_VERSION___ == 1
+    return waveform_frequency_;
+#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
+    i2c_write(config_settings_.signal_generator_board_i2c_address,
+              CMD_GET_WAVEFORM_FREQUENCY);
+    delay(I2C_DELAY);
+    Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
+                     (uint8_t)1);
+    if (Wire.available()) {
+      uint8_t n_bytes_to_read = Wire.read();
+      if (n_bytes_to_read == sizeof(float) + 1) {
+        uint8_t data[5];
+        i2c_read(config_settings_.signal_generator_board_i2c_address,
+                 (uint8_t * )&data[0], 5);
+        return_code_ = data[4];
+        if (return_code_ == RETURN_OK) {
+          memcpy(&waveform_frequency_, &data[0], sizeof(float));
+          return waveform_frequency_;
+        }
+      }
+    }
+    return RETURN_BAD_VALUE_S;
+#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
+  }
+
+#if ___HARDWARE_MAJOR_VERSION___ == 1
+  uint8_t waveform() const {
+    return digitalRead(WAVEFORM_SELECT_);
+  }
+
+  int8_t set_waveform(uint16_t waveform_type) {
+    if (waveform == SINE || waveform == SQUARE) {
+      digitalWrite(WAVEFORM_SELECT_, waveform_type);
+      return RETURN_OK;
+    }
+    return RETURN_BAD_VALUE_S;
+  }
+#endif  //#if ___HARDWARE_MAJOR_VERSION___ == 1
   float measure_impedance(uint16_t sampling_time_ms, uint16_t n_samples,
                           uint16_t delay_between_samples_ms);
-#endif
 #ifdef AVR
   uint8_t set_adc_prescaler(const uint8_t index);
 #endif
+  float series_resistance(uint8_t channel) {
+    switch(channel) {
+      case 0:
+        return config_settings_.A0_series_resistance
+          [A0_series_resistor_index_];
+        break;
+      case 1:
+        return config_settings_.A1_series_resistance
+          [A1_series_resistor_index_];
+        break;
+      default:
+        break;
+    }
+    return RETURN_BAD_VALUE_S;
+  }
+
+  int8_t set_series_resistance(uint8_t channel, float value) {
+    switch(channel) {
+      case 0:
+        config_settings_.A0_series_resistance
+          [A0_series_resistor_index_] = value;
+        save_config();
+        return RETURN_OK;
+        break;
+      case 1:
+        config_settings_.A1_series_resistance
+          [A1_series_resistor_index_] = value;
+        save_config();
+        return RETURN_OK;
+        break;
+      default:
+        break;
+    }
+    return RETURN_BAD_INDEX;
+  }
+
+  float series_capacitance(uint8_t channel) {
+    switch(channel) {
+      case 0:
+        return config_settings_.A0_series_capacitance[A0_series_resistor_index_];
+        break;
+      case 1:
+        return config_settings_.A1_series_capacitance
+          [A1_series_resistor_index_];
+        break;
+      default:
+        break;
+    }
+    return RETURN_BAD_VALUE_S;
+  }
+
+  int8_t set_series_capacitance(uint8_t channel, float value) {
+    switch(channel) {
+      case 0:
+        config_settings_.A0_series_capacitance
+          [A0_series_resistor_index_] = value;
+        save_config();
+        return RETURN_OK;
+        break;
+      case 1:
+        config_settings_.A1_series_capacitance
+          [A1_series_resistor_index_] = value;
+        save_config();
+        return RETURN_OK;
+        break;
+      default:
+        break;
+    }
+    return RETURN_BAD_INDEX;
+  }
+
+  void set_amplifier_gain(float value) {
+    if (value > 0) {
+      if (auto_adjust_amplifier_gain_) {
+        amplifier_gain_ = value;
+      } else {
+        config_settings_.amplifier_gain = value;
+        auto_adjust_amplifier_gain_ = false;
+        save_config();
+      }
+    }
+  }
+
+  bool auto_adjust_amplifier_gain() const {
+    return config_settings_.amplifier_gain <= 0;
+  }
+
+  void set_auto_adjust_amplifier_gain(bool value) {
+    if (value) {
+      config_settings_.amplifier_gain = 0;
+    } else {
+      config_settings_.amplifier_gain = amplifier_gain_;
+    }
+    /* Trigger enabling of auto-adjust amplifier gain based on rules in
+     * `save_config`. */
+    save_config();
+  }
+
   //private members
-#if defined(AVR) || defined(__SAM3X8E__)
   uint16_t number_of_channels_;
   uint8_t sampling_rate_index_;
   uint8_t A0_series_resistor_index_;
@@ -405,7 +432,6 @@ public:
   float amplifier_gain_;
   bool auto_adjust_amplifier_gain_;
   ConfigSettings config_settings_;
-#endif  // #ifdef AVR
 
   static const float SAMPLING_RATES_[];
 private:
@@ -415,7 +441,6 @@ private:
   static const char HARDWARE_VERSION_[];
   static const char MANUFACTURER_[];
   static const char URL_[];
-#if defined(AVR) || defined(__SAM3X8E__)
   static const char PROTOCOL_NAME_[];
   static const char PROTOCOL_VERSION_[];
 
@@ -470,11 +495,5 @@ private:
 
   // LTC6904 (programmable oscillator) chip address
   static const uint8_t LTC6904_ = 0x17;
-#else  // #ifdef AVR
-  static const char CSV_INDENT_[];
-#endif  // #ifdef AVR
-
-
 };
 #endif // _DMF_CONTROL_BOARD_H_
-

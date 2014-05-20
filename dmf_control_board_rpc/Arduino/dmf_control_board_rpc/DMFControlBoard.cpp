@@ -19,46 +19,36 @@ along with dmf_control_board.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 #include "DMFControlBoard.h"
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-  #include <boost/format.hpp>
-  using namespace std;
-  using boost::format;
-#else
-  #include "Arduino.h"
-  #include <Wire.h>
-  #include <OneWire.h>
-  #include <SPI.h>
-  #ifdef AVR
-    #include <EEPROM.h>
-  #elif defined(__SAM3X8E__)
-    #include <DueFlashStorage.h>
-    extern DueFlashStorage EEPROM;
-  #endif
-  #include <math.h>
+#include "Arduino.h"
+#include <Wire.h>
+#include <OneWire.h>
+#include <SPI.h>
+#ifdef AVR
+  #include <EEPROM.h>
+#elif defined(__SAM3X8E__)
+  #include <DueFlashStorage.h>
+  extern DueFlashStorage EEPROM;
 #endif
+#include <math.h>
 
 #ifdef AVR // only on Arduino Mega 2560
   const float DMFControlBoard::SAMPLING_RATES_[] = { 8908, 16611, 29253, 47458,
                                                      68191, 90293, 105263 };
 #endif
-#if defined(AVR) || defined(__SAM3X8E__)
-  const char DMFControlBoard::PROTOCOL_NAME_[] = "DMF Control Protocol";
-  const char DMFControlBoard::PROTOCOL_VERSION_[] = "0.1";
+const char DMFControlBoard::PROTOCOL_NAME_[] = "DMF Control Protocol";
+const char DMFControlBoard::PROTOCOL_VERSION_[] = "0.1";
 
-  void printe(float number) {
-    int8_t exp = floor(log10(number));
-    Serial.print(number / pow(10, exp));
-    Serial.print("E");
-    Serial.print(exp, DEC);
-  }
+void printe(float number) {
+  int8_t exp = floor(log10(number));
+  Serial.print(number / pow(10, exp));
+  Serial.print("E");
+  Serial.print(exp, DEC);
+}
 
-  void printlne(float number) {
-    printe(number);
-    Serial.println();
-  }
-#else
-  const char DMFControlBoard::CSV_INDENT_[] = ",,,,,,,,";
-#endif
+void printlne(float number) {
+  printe(number);
+  Serial.println();
+}
 
 const char DMFControlBoard::NAME_[] = "Arduino DMF Controller";
 const char DMFControlBoard::MANUFACTURER_[] = "Wheeler Microfluidics Lab";
@@ -66,16 +56,9 @@ const char DMFControlBoard::SOFTWARE_VERSION_[] = ___SOFTWARE_VERSION___;
 const char DMFControlBoard::URL_[] =
     "http://microfluidics.utoronto.ca/dmf_control_board";
 
-DMFControlBoard::DMFControlBoard()
-  : RemoteObject(true
-#if !( defined(AVR) || defined(__SAM3X8E__) )
-                   ,"DMFControlBoard" //used for logging
-#endif
-                   ) {
-}
+DMFControlBoard::DMFControlBoard() : RemoteObject(true) {}
 
-DMFControlBoard::~DMFControlBoard() {
-}
+DMFControlBoard::~DMFControlBoard() {}
 
 float DMFControlBoard::measure_impedance(uint16_t sampling_time_ms,
                                          uint16_t n_samples,
@@ -252,7 +235,6 @@ float DMFControlBoard::measure_impedance(uint16_t sampling_time_ms,
 }
 
 
-#if defined(AVR) || defined(__SAM3X8E__)
 ///////////////////////////////////////////////////////////////////////////////
 //
 // These functions are only defined on the Arduino.
@@ -776,17 +758,17 @@ void DMFControlBoard::save_config() {
   load_config();
 }
 
-uint8_t DMFControlBoard::set_waveform_voltage(const float output_vrms,
-                                              const bool wait_for_reply) {
-  uint8_t return_code;
+int8_t DMFControlBoard::set_waveform_voltage(const float output_vrms,
+                                             const bool wait_for_reply) {
+  int8_t return_code;
 #if ___HARDWARE_MAJOR_VERSION___==1
   float step = output_vrms / amplifier_gain_ * 2 * sqrt(2) / 4 * 255;
   if (output_vrms < 0 || step > 255) {
-    return_code = RETURN_BAD_VALUE;
+    return RETURN_BAD_VALUE_S;
   } else {
     waveform_voltage_ = output_vrms;
     set_pot(POT_INDEX_WAVEOUT_GAIN_2_, step);
-    return_code = RETURN_OK;
+    return RETURN_OK;
   }
 #else  // #if ___HARDWARE_MAJOR_VERSION___==1
   float vrms = output_vrms / amplifier_gain_;
@@ -807,295 +789,72 @@ uint8_t DMFControlBoard::set_waveform_voltage(const float output_vrms,
           config_settings_.signal_generator_board_i2c_address,
           (uint8_t*)&return_code,
           sizeof(return_code));
-        if (return_code==RETURN_OK) {
+        if (return_code == RETURN_OK) {
           waveform_voltage_ = output_vrms;
         }
       }
     }
+    return return_code;
   } else {
     waveform_voltage_ = output_vrms;
-    return_code = RETURN_OK;
+    return RETURN_OK;
   }
 #endif  // #if ___HARDWARE_MAJOR_VERSION___==1 / #else
-  return return_code;
 }
+
+
+int8_t DMFControlBoard::set_waveform_frequency(float frequency) {
+  waveform_frequency_ = frequency;
+#if ___HARDWARE_MAJOR_VERSION___ == 1
+  /* The frequency of the `LTC6904` oscillator needs to be set to 50x
+   * the fundamental frequency. */
+  float freq = waveform_frequency_ * 50;
+  // valid frequencies are 1kHz to 68MHz
+  if (freq < 1e3 || freq > 68e6) {
+    return RETURN_BAD_VALUE_S;
+  } else {
+    uint8_t oct = 3.322 * log(freq / 1039) / log(10);
+    uint16_t dac = round(2048 - (2078 * pow(2, 10 + oct)) / freq);
+    uint8_t cnf = 2; // CLK on, /CLK off
+    // msb = OCT3 OCT2 OCT1 OCT0 DAC9 DAC8 DAC7 DAC6
+    uint8_t msb = (oct << 4) | (dac >> 6);
+    // lsb =  DAC5 DAC4 DAC3 DAC2 DAC1 DAC0 CNF1 CNF0
+    uint8_t lsb = (dac << 2) | cnf;
+    Wire.beginTransmission(LTC6904_);
+    Wire.write(msb);
+    Wire.write(lsb);
+    Wire.endTransmission();     // stop transmitting
+    return RETURN_OK;
+  }
+#else  // #if ___HARDWARE_MAJOR_VERSION___ == 1
+  uint8_t data[5];
+  data[0] = CMD_SET_WAVEFORM_FREQUENCY;
+  memcpy(&data[1], &waveform_frequency_, sizeof(float));
+  i2c_write(config_settings_.signal_generator_board_i2c_address,
+            data, 5);
+  delay(I2C_DELAY);
+  Wire.requestFrom(config_settings_.signal_generator_board_i2c_address,
+                   (uint8_t)1);
+  if (Wire.available()) {
+    uint8_t n_bytes_to_read = Wire.read();
+    if (n_bytes_to_read == 1) {
+      uint8_t n_bytes_read = 0;
+      n_bytes_read += i2c_read(
+        config_settings_.signal_generator_board_i2c_address,
+        (uint8_t * )&return_code_,
+        sizeof(return_code_));
+      return return_code_;
+    }
+  }
+  return RETURN_BAD_VALUE_S;
+#endif  // #if ___HARDWARE_MAJOR_VERSION___ == 1 / #else
+}
+
 
 void /* DEVICE */ DMFControlBoard::persistent_write(uint16_t address,
                                                     uint8_t value) {
-    RemoteObject::persistent_write(address, value);
-    /* Reload config from persistent storage _(e.g., EEPROM)_ to refresh
-     * `ConfigSettings` struct with new value. */
-    load_config();
+  RemoteObject::persistent_write(address, value);
+  /* Reload config from persistent storage _(e.g., EEPROM)_ to refresh
+   * `ConfigSettings` struct with new value. */
+  load_config();
 }
-
-#else   // #ifdef AVR
-///////////////////////////////////////////////////////////////////////////////
-//
-// These functions are only defined on the PC.
-//
-///////////////////////////////////////////////////////////////////////////////
-
-uint16_t DMFControlBoard::number_of_channels() {
-  return send_read_command<uint16_t>(CMD_GET_NUMBER_OF_CHANNELS,
-                                     "number_of_channels()");
-}
-
-vector<uint8_t> DMFControlBoard::state_of_all_channels() {
-  const char* function_name = "state_of_all_channels()";
-  log_separator();
-  log_message("send command", function_name);
-  if (send_command(CMD_GET_STATE_OF_ALL_CHANNELS) == RETURN_OK) {
-    log_message("CMD_GET_STATE_OF_ALL_CHANNELS", function_name);
-    std::vector < uint8_t> state_of_channels;
-    for (int i = 0; i < payload_length(); i++) {
-      state_of_channels.push_back(read_uint8());
-      log_message(str(format("state_of_channels_[%d]=%d") % i %
-        state_of_channels[i]).c_str(), function_name);
-    }
-    return state_of_channels;
-  }
-  return std::vector<uint8_t>(); // return an empty vector
-};
-
-uint8_t DMFControlBoard::state_of_channel(const uint16_t channel) {
-  serialize(&channel, sizeof(channel));
-  return send_read_command<uint8_t>(CMD_GET_STATE_OF_CHANNEL,
-                                    "state_of_channel()");
-};
-
-float DMFControlBoard::sampling_rate() {
-  return send_read_command<float>(CMD_GET_SAMPLING_RATE,
-                                  "sampling_rate()");
-}
-
-uint8_t DMFControlBoard::series_resistor_index(const uint8_t channel) {
-  serialize(&channel, sizeof(channel));
-  return send_read_command<uint8_t>(CMD_GET_SERIES_RESISTOR_INDEX,
-                                    "series_resistor_index()");
-}
-
-float DMFControlBoard::series_resistance(const uint8_t channel) {
-  serialize(&channel, sizeof(channel));
-  return send_read_command<float>(CMD_GET_SERIES_RESISTANCE,
-                                  "series_resistance()");
-}
-
-float DMFControlBoard::series_capacitance(const uint8_t channel) {
-  serialize(&channel, sizeof(channel));
-  return send_read_command<float>(CMD_GET_SERIES_CAPACITANCE,
-                                  "series_capacitance()");
-}
-
-float DMFControlBoard::amplifier_gain() {
-    return send_read_command<float>(CMD_GET_AMPLIFIER_GAIN,
-                                    "amplifier_gain()");
-}
-
-bool DMFControlBoard::auto_adjust_amplifier_gain() {
-    uint8_t result = send_read_command<uint8_t>(
-        CMD_GET_AUTO_ADJUST_AMPLIFIER_GAIN, "auto_adjust_amplifier_gain()");
-    return result > 0;
-}
-
-std::string DMFControlBoard::waveform() {
-    const char* function_name = "waveform()";
-    uint8_t waveform_type = send_read_command<uint8_t>(CMD_GET_WAVEFORM,
-                                                       function_name);
-    std::string waveform_str;
-    if (waveform_type == SINE || waveform_type == SQUARE) {
-        if (waveform_type == SINE) {
-          waveform_str = "SINE";
-        } else if (waveform_type == SQUARE) {
-          waveform_str = "SQUARE";
-        }
-        log_message(str(format("waveform=%s") % waveform_str).c_str(),
-                   function_name);
-        return waveform_str;
-    } else {
-        return_code_ = RETURN_BAD_VALUE;
-        log_message("CMD_GET_WAVEFORM, Bad value", function_name);
-    }
-}
-
-float DMFControlBoard::waveform_voltage() {
-    return send_read_command<float>(CMD_GET_WAVEFORM_VOLTAGE,
-                                    "waveform_voltage()");
-}
-
-float DMFControlBoard::waveform_frequency() {
-    return send_read_command<float>(CMD_GET_WAVEFORM_FREQUENCY,
-                                    "waveform_frequency()");
-}
-
-uint8_t DMFControlBoard::power_supply_pin() {
-    return send_read_command<uint8_t>(CMD_GET_POWER_SUPPLY_PIN,
-                                      "power_supply_pin()");
-}
-
-bool DMFControlBoard::watchdog_state() {
-    return send_read_command<uint8_t>(CMD_GET_WATCHDOG_STATE,
-                                      "watchdog_state()");
-}
-
-bool DMFControlBoard::watchdog_enabled() {
-    return send_read_command<uint8_t>(CMD_GET_WATCHDOG_ENABLED,
-                                      "watchdog_enabled()");
-}
-
-bool DMFControlBoard::atx_power_state() {
-    return send_read_command<uint8_t>(CMD_GET_ATX_POWER_STATE,
-                                      "atx_power_state()");
-}
-
-uint8_t DMFControlBoard::set_sampling_rate(const uint8_t sampling_rate) {
-    return send_set_command(CMD_SET_SAMPLING_RATE, "set_sampling_rate()",
-                            sampling_rate);
-}
-
-uint8_t DMFControlBoard::set_watchdog_state(bool state) {
-    return send_set_command(CMD_SET_WATCHDOG_STATE, "set_watchdog_state()",
-                            (uint8_t)state);
-}
-
-uint8_t DMFControlBoard::set_watchdog_enabled(bool on) {
-    return send_set_command(CMD_SET_WATCHDOG_ENABLED, "set_watchdog_enabled()",
-                            (uint8_t)on);
-}
-
-uint8_t DMFControlBoard::set_atx_power_state(bool state) {
-    return send_set_command(CMD_SET_ATX_POWER_STATE, "set_atx_power_state()",
-                            (uint8_t)state);
-}
-
-uint8_t DMFControlBoard::set_series_resistor_index(const uint8_t channel,
-                                                   const uint8_t index) {
-    serialize(&channel, sizeof(channel));
-    return send_set_command(CMD_SET_SERIES_RESISTOR_INDEX,
-                            "set_series_resistor_index()", index);
-}
-
-uint8_t DMFControlBoard::set_series_resistance(const uint8_t channel,
-                                               float resistance) {
-    serialize(&channel, sizeof(channel));
-    return send_set_command(CMD_SET_SERIES_RESISTANCE,
-                            "set_series_resistance()", resistance);
-}
-
-uint8_t DMFControlBoard::set_series_capacitance(const uint8_t channel,
-                                                float capacitance) {
-    serialize(&channel, sizeof(channel));
-    return send_set_command(CMD_SET_SERIES_CAPACITANCE,
-                            "set_series_capacitance()", capacitance);
-}
-
-uint8_t DMFControlBoard::set_amplifier_gain(float gain) {
-    return send_set_command(CMD_SET_AMPLIFIER_GAIN, "set_amplifier_gain()",
-                            gain);
-}
-
-uint8_t DMFControlBoard::set_auto_adjust_amplifier_gain(bool on) {
-    return send_set_command(CMD_SET_AUTO_ADJUST_AMPLIFIER_GAIN,
-                            "set_auto_adjust_amplifier_gain()",
-                            (uint8_t)on);
-}
-
-uint8_t DMFControlBoard::set_state_of_all_channels(const vector <uint8_t>
-                                                   state) {
-  const char* function_name = "set_state_of_all_channels()";
-  log_separator();
-  log_message("send command", function_name);
-  serialize(&state[0],state.size() * sizeof(uint8_t));
-  if (send_command(CMD_SET_STATE_OF_ALL_CHANNELS) == RETURN_OK) {
-    log_message("CMD_SET_STATE_OF_ALL_CHANNELS", function_name);
-    log_message("all channels set successfully", function_name);
-  }
-  return return_code();
-}
-
-uint8_t DMFControlBoard::set_state_of_channel(const uint16_t channel,
-                                              const uint8_t state) {
-    serialize(&channel, sizeof(channel));
-    return send_set_command(CMD_SET_STATE_OF_CHANNEL, "set_state_of_channel()",
-                            state);
-}
-
-uint8_t DMFControlBoard::set_waveform(bool waveform) {
-    return send_set_command(CMD_SET_WAVEFORM, "set_waveform()", waveform);
-}
-
-uint8_t DMFControlBoard::set_waveform_voltage(const float v_rms){
-    return send_set_command(CMD_SET_WAVEFORM_VOLTAGE, "set_waveform_voltage()",
-                            v_rms);
-}
-
-uint8_t DMFControlBoard::set_waveform_frequency(const float freq_hz) {
-    return send_set_command(CMD_SET_WAVEFORM_FREQUENCY,
-                            "set_waveform_frequency()", freq_hz);
-}
-
-std::vector <float> DMFControlBoard::measure_impedance(
-                                          uint16_t sampling_time_ms,
-                                          uint16_t n_samples,
-                                          uint16_t delay_between_samples_ms,
-                                          const std::vector <uint8_t> state) {
-  measure_impedance_non_blocking(sampling_time_ms,
-                                 n_samples,
-                                 delay_between_samples_ms,
-                                 state);
-  boost::this_thread::sleep(boost::posix_time::milliseconds(
-      n_samples * (delay_between_samples_ms + sampling_time_ms)));
-  return get_impedance_data();
-}
-
-void DMFControlBoard::measure_impedance_non_blocking(
-                                          uint16_t sampling_time_ms,
-                                          uint16_t n_samples,
-                                          uint16_t delay_between_samples_ms,
-                                          const std::vector <uint8_t> state) {
-  const char* function_name = "measure_impedance_non_blocking()";
-  log_separator();
-  log_message("send command", function_name);
-  // if we get this far, everything is ok
-  serialize(&sampling_time_ms, sizeof(sampling_time_ms));
-  serialize(&n_samples, sizeof(n_samples));
-  serialize(&delay_between_samples_ms, sizeof(delay_between_samples_ms));
-  serialize(&state[0],state.size() * sizeof(uint8_t));
-  send_non_blocking_command(CMD_MEASURE_IMPEDANCE);
-}
-
-std::vector<float> DMFControlBoard::get_impedance_data() {
-  const char* function_name = "get_impedance_data()";
-  if (validate_reply(CMD_MEASURE_IMPEDANCE) == RETURN_OK) {
-    uint16_t n_samples = payload_length() / (2 * sizeof(int16_t) + 2 *
-                                             sizeof(int8_t));
-    log_message(str(format("Read %d impedance samples") % n_samples).c_str(),
-                function_name);
-    std::vector < float> impedance_buffer(4 * n_samples);
-    for (uint16_t i = 0; i < n_samples; i++) {
-      impedance_buffer[4 * i] = (float)read_int16() * 5.0 / 1023 /  // V_hv
-                                sqrt(2) / 2;
-      impedance_buffer[4 * i + 1] = read_int8(); // hv_resistor
-      impedance_buffer[4 * i + 2] = (float)read_int16() * 5.0 / 1023 /  // V_fb
-                                    sqrt(2) / 2;
-      impedance_buffer[4 * i + 3] = read_int8(); // fb_resistor
-    }
-    log_message(str(format("payload_length()=%d") % payload_length()).c_str(),
-                function_name);
-    log_message(str(format("bytes_read() - payload_length()=%d")
-                % (bytes_read() - payload_length())).c_str(), function_name);
-    return impedance_buffer;
-  }
-  return std::vector<float>(); // return an empty vector
-}
-
-uint8_t DMFControlBoard::reset_config_to_defaults() {
-  const char* function_name = "reset_config_to_defaults()";
-  log_separator();
-  if (send_command(CMD_RESET_CONFIG_TO_DEFAULTS) == RETURN_OK) {
-    log_message("CMD_RESET_CONFIG_TO_DEFAULTS", function_name);
-    log_message("config reset successfully", function_name);
-  }
-  return return_code();
-}
-
-#endif // defined(AVR) || defined(__SAM3X8E__)
