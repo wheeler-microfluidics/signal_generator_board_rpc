@@ -44,11 +44,13 @@ public:
   void set_pot(uint8_t address, uint8_t level, bool save_to_eeprom) {
     board_.set_pot(address, level, save_to_eeprom);
   }
-  void set_waveform_frequency(float frequency) {
+  float set_waveform_frequency(float frequency) {
     board_.set_waveform_frequency(frequency);
+    return waveform_frequency();
   }
-  uint8_t set_waveform_voltage(float vrms) {
-    return board_.set_waveform_voltage(vrms);
+  float set_waveform_voltage(float vrms) {
+    board_.set_waveform_voltage(vrms);
+    return waveform_voltage();
   }
   void set_i2c_address(uint8_t address) { board_.set_i2c_address(address); }
   void set_hf_amplitude_correction(float correction) {
