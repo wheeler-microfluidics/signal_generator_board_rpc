@@ -7,7 +7,12 @@ from paver.setuputils import setup, find_package_data
 import version
 sys.path.append(path('.').abspath())
 from signal_generator_board_rpc import get_sketch_directory, package_path
-from arduino_rpc.proto import CodeGenerator
+try:
+    from arduino_rpc.proto import CodeGenerator
+except ImportError:
+    import warnings
+
+    warnings.warn('Could not import `clang`-based code-generator.')
 
 
 signal_generator_board_rpc_files = find_package_data(package=
@@ -32,7 +37,6 @@ setup(name='wheeler.signal_generator_board_rpc',
 
 
 @task
-@cmdopts([('disable_i2c', 'd', 'Disable I2C communication.')])
 def generate_command_code():
     code_generator = CodeGenerator(get_sketch_directory().joinpath('Node.h'),
                                    disable_i2c=getattr(options, 'disable_i2c',
