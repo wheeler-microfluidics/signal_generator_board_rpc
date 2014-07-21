@@ -2,7 +2,6 @@
 #include "signal_generator_board.h"
 #include <avr/eeprom.h>
 #include <math.h>
-#include <SPI.h>
 #include <Wire.h>
 #include "Memory.h"
 
@@ -29,9 +28,8 @@ void SignalGeneratorClass::begin() {
   pinMode(LTC6903_SS_PIN, OUTPUT);
   pinMode(AD5206_SS_PIN, OUTPUT);
   pinMode(FREQ_RANGE_PIN, OUTPUT);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setDataMode(SPI_MODE0);
-  SPI.begin();
+  pinMode(S_SCK, OUTPUT);
+  pinMode(S_MOSI, OUTPUT);
   LoadConfig();
   set_waveform_frequency(1000);
   set_waveform_voltage(0);
@@ -101,8 +99,8 @@ void SignalGeneratorClass::set_pot(uint8_t index, uint8_t value,
                                    bool save_to_eeprom) {
   // take the SS pin low to select the chip:
   digitalWrite(AD5206_SS_PIN, LOW);
-  SPI.transfer(index);
-  SPI.transfer(value);
+  shiftOutFast(S_MOSI, S_SCK, MSBFIRST, index);
+  shiftOutFast(S_MOSI, S_SCK, MSBFIRST, value);
   // take the SS pin high to de-select the chip:
   digitalWrite(AD5206_SS_PIN, HIGH);
   pot_[index] = value;
@@ -151,8 +149,8 @@ void SignalGeneratorClass::set_waveform_frequency(float freq) {
   uint8_t lsb = (dac << 2) | cnf;
 
   digitalWrite(LTC6903_SS_PIN, LOW);
-  SPI.transfer(msb);
-  SPI.transfer(lsb);
+  shiftOutFast(S_MOSI, S_SCK, MSBFIRST, msb);
+  shiftOutFast(S_MOSI, S_SCK, MSBFIRST, lsb);
   digitalWrite(LTC6903_SS_PIN, HIGH);
 
   float FSF;

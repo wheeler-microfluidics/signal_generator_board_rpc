@@ -8,9 +8,62 @@
  *
  * [1]: http://www.linear.com/product/LTC6903 */
 
-// Arduino digital pin 11 (MOSI) to LTC6903 pin 2
-// Arduino digital pin 13 (SCK) to LTC6903 pin 3
+// Arduino digital pin 6 (MOSI) to LTC6903 pin 2
+// Arduino digital pin 5 (SCK) to LTC6903 pin 3
 // Arduino digital pin 2 to LTC6903 pin 4
+#define S_SCK         5
+#define S_MOSI        6
+
+
+inline void shiftOutFast(uint8_t dataPin, uint8_t clockPin, uint8_t bitOrder,
+                         uint8_t val) {
+  uint8_t cnt;
+  uint8_t bitData, bitNotData;
+  uint8_t bitClock, bitNotClock;
+  volatile uint8_t *outData;
+  volatile uint8_t *outClock;
+
+  outData = portOutputRegister(digitalPinToPort(dataPin));
+  outClock = portOutputRegister(digitalPinToPort(clockPin));
+  bitData = digitalPinToBitMask(dataPin);
+  bitClock = digitalPinToBitMask(clockPin);
+
+  bitNotClock = bitClock;
+  bitNotClock ^= 0x0ff;
+
+  bitNotData = bitData;
+  bitNotData ^= 0x0ff;
+
+  cnt = 8;
+  if (bitOrder == LSBFIRST) {
+    do {
+      if ( val & 1 ) {
+        *outData |= bitData;
+      } else {
+        *outData &= bitNotData;
+      }
+
+      *outClock |= bitClock;
+      *outClock &= bitNotClock;
+      val >>= 1;
+      cnt--;
+    } while( cnt != 0 );
+  } else {
+    do {
+      if ( val & 128 ) {
+        *outData |= bitData;
+      } else {
+        *outData &= bitNotData;
+      }
+
+      *outClock |= bitClock;
+      *outClock &= bitNotClock;
+      val <<= 1;
+      cnt--;
+    } while( cnt != 0 );
+  }
+}
+
 
 class SignalGeneratorClass {
 public:
