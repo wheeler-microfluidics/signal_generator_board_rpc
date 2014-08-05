@@ -92,7 +92,7 @@ public:
   static const int8_t RETURN_BAD_VALUE            = -7;
   static const int8_t RETURN_MAX_PAYLOAD_EXCEEDED = -8;
 
-  static const uint16_t MAX_PAYLOAD_LENGTH = 32;
+  static const uint16_t MAX_PAYLOAD_LENGTH = 42;
   static const uint32_t BAUD_RATE          = 115200;
   static const int LTC6903_SS_PIN          = 2;
   static const int AD5206_SS_PIN           = 3;
@@ -102,6 +102,7 @@ public:
   static const float R_MAX                 = 100e3;
   static const float C1                    = 47e-9;
   static const float C2                    = 6.8e-9;
+  static const int POT_COUNT               = 6;
   static const float LOG_F_STEP;
   static const char R1_INDEX[] PROGMEM;
   static const char R2_INDEX[] PROGMEM;
@@ -111,6 +112,7 @@ public:
   static const uint16_t EEPROM_CONFIG_SETTINGS = 0;
 
   void begin();
+
   // local accessors
   const char* name() { return prog_string(NAME_); }
   const char* hardware_version() { return prog_string(HARDWARE_VERSION_); }
@@ -119,7 +121,10 @@ public:
   const char* protocol_name() { return prog_string(PROTOCOL_NAME_); }
   const char* protocol_version() { return prog_string(PROTOCOL_VERSION_); }
   const char* manufacturer() { return prog_string(MANUFACTURER_); }
-  const char* prog_string(const char* str) { strcpy_P(buffer_, str); return buffer_; }
+  const char* prog_string(const char* str) {
+    strcpy_P(buffer_, str);
+    return buffer_;
+  }
 
   void Listen();
 
@@ -131,6 +136,9 @@ public:
   uint8_t set_waveform_voltage(float vrms);
   uint8_t i2c_address() const { return config_settings_.i2c_address; }
   void set_i2c_address(uint8_t address);
+  float hf_amplitude_correction() const {
+    return config_settings_.hf_amplitude_correction;
+  }
   void set_hf_amplitude_correction(float correction);
   float vout_pk_pk();
   version_t ConfigVersion();
@@ -150,7 +158,7 @@ private:
   config_settings_t config_settings_;
   float waveform_frequency_;
   float waveform_voltage_;
-  uint8_t pot_[6];
+  uint8_t pot_[POT_COUNT];
 };
 
 extern SignalGeneratorClass SignalGeneratorBoard;

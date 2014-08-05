@@ -52,28 +52,18 @@ void SignalGeneratorClass::DumpConfig() {
 }
 #endif
 
-String SignalGeneratorClass::VersionString(version_t version) {
-  return String(version.major) + "." + String(version.minor) + "." + String(version.micro);
-}
-
-SignalGeneratorClass::version_t SignalGeneratorClass::ConfigVersion() {
-  version_t config_version;
-  eeprom_read_block((void*)&config_version, (void*)EEPROM_CONFIG_SETTINGS, sizeof(version_t));
-  return config_version;
-}
-
 void SignalGeneratorClass::LoadConfig(bool use_defaults) {
-  eeprom_read_block((void*)&config_settings_, (void*)EEPROM_CONFIG_SETTINGS, sizeof(config_settings_t));
+  eeprom_read_block((void*)&config_settings_, (void*)EEPROM_CONFIG_SETTINGS,
+                    sizeof(config_settings_t));
 
   // If we're not at the expected version by the end of the upgrade path,
   // set everything to default values.
-  if(!(config_settings_.version.major==0 &&
-     config_settings_.version.minor==0 &&
-     config_settings_.version.micro==0) || use_defaults) {
-
-    config_settings_.version.major=0;
-    config_settings_.version.minor=0;
-    config_settings_.version.micro=0;
+  if (!(config_settings_.version.major == 0 &&
+        config_settings_.version.minor == 0 &&
+        config_settings_.version.micro == 0) || use_defaults) {
+    config_settings_.version.major = 0;
+    config_settings_.version.minor = 0;
+    config_settings_.version.micro = 0;
     config_settings_.i2c_address = 10;
     config_settings_.pot[0] = 128;
     config_settings_.pot[1] = 128;
@@ -86,22 +76,23 @@ void SignalGeneratorClass::LoadConfig(bool use_defaults) {
     SaveConfig();
   }
   Wire.begin(config_settings_.i2c_address);
-  for(uint8_t i=0; i<6; i++) {
+  for(uint8_t i = 0; i < 6; i++) {
     set_pot(i, config_settings_.pot[i], false);
   }
 }
 
 void SignalGeneratorClass::SaveConfig() {
-  eeprom_write_block((void*)&config_settings_, (void*)EEPROM_CONFIG_SETTINGS, sizeof(config_settings_t));
+  eeprom_write_block((void*)&config_settings_, (void*)EEPROM_CONFIG_SETTINGS,
+                     sizeof(config_settings_t));
 }
 
 void SignalGeneratorClass::set_pot(uint8_t index, uint8_t value,
                                    bool save_to_eeprom) {
-  // take the SS pin low to select the chip:
+  // Set the SS pin low to select the chip.
   digitalWrite(AD5206_SS_PIN, LOW);
   shiftOutFast(S_MOSI, S_SCK, MSBFIRST, index);
   shiftOutFast(S_MOSI, S_SCK, MSBFIRST, value);
-  // take the SS pin high to de-select the chip:
+  // Set the SS pin high to de-select the chip.
   digitalWrite(AD5206_SS_PIN, HIGH);
   pot_[index] = value;
   if(save_to_eeprom) {
@@ -112,9 +103,6 @@ void SignalGeneratorClass::set_pot(uint8_t index, uint8_t value,
 
 uint8_t SignalGeneratorClass::set_waveform_voltage(float vrms) {
   if (vrms < 0 || vrms > config_settings_.max_voltage_rms) {
-    Serial.print(P("set_waveform_voltage("));
-    Serial.print(vrms);
-    Serial.println(P(") Error: BAD_VALUE"));
     return RETURN_BAD_VALUE;
   }
   waveform_voltage_ = vrms;
@@ -208,4 +196,3 @@ float SignalGeneratorClass::vout_pk_pk() {
   float vout = (float)(max_v - min_v) * (5.0 / 1023.0);
   return vout;
 }
-

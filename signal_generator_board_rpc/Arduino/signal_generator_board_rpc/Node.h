@@ -5,6 +5,7 @@
 #include "Array.h"
 #include "Memory.h"
 #include "signal_generator_board.h"
+#include "custom_pb.h"
 
 /* # Arduino digital pins connected to shift registers #
  *
@@ -37,40 +38,74 @@ public:
   /**************************************************************
    * METHODS
    **************************************************************/
-  uint8_t pot(uint8_t index) const { return board_.pot(index); }
-  float waveform_frequency() const { return board_.waveform_frequency(); }
-  float waveform_voltage() const { return board_.waveform_voltage(); }
-  uint8_t i2c_address() const { return board_.i2c_address(); }
-  void set_pot(uint8_t address, uint8_t level, bool save_to_eeprom) {
-    board_.set_pot(address, level, save_to_eeprom);
+  UInt8Array pot_values() {
+    UInt8Array result;
+    result.data = reinterpret_cast<uint8_t *>(&board_.buffer_[0]);
+    for(int i = 0; i < board_.POT_COUNT; i++) {
+      result.data[i] = board_.pot(i);
+    }
+    result.length = board_.POT_COUNT;
+    return result;
   }
+  void set_pot(uint8_t index, uint8_t value, bool save_to_eeprom) {
+    board_.set_pot(index, value, save_to_eeprom);
+  }
+  void load_config(bool use_defaults) { board_.LoadConfig(use_defaults); }
+  void set_i2c_address(uint8_t address) { board_.set_i2c_address(address); }
+  uint8_t i2c_address() const { return board_.i2c_address(); }
+  float set_hf_amplitude_correction(float correction) {
+    board_.set_hf_amplitude_correction(correction);
+    return board_.hf_amplitude_correction();
+  }
+  float hf_amplitude_correction() const {
+    return board_.hf_amplitude_correction();
+  }
+
+  float waveform_frequency() const { return board_.waveform_frequency(); }
   float set_waveform_frequency(float frequency) {
     board_.set_waveform_frequency(frequency);
     return waveform_frequency();
   }
+  float waveform_voltage() const { return board_.waveform_voltage(); }
   float set_waveform_voltage(float vrms) {
     board_.set_waveform_voltage(vrms);
     return waveform_voltage();
   }
-  void set_i2c_address(uint8_t address) { board_.set_i2c_address(address); }
-  void set_hf_amplitude_correction(float correction) {
-    board_.set_hf_amplitude_correction(correction);
-  }
   float vout_pk_pk() { return board_.vout_pk_pk(); }
-  void load_config(bool use_defaults) { board_.LoadConfig(use_defaults); }
-  uint16_t config_version(uint8_t position) {
-    switch (position) {
-      case 0:
-        return board_.ConfigVersion().major;
-      case 1:
-        return board_.ConfigVersion().minor;
-      case 2:
-        return board_.ConfigVersion().micro;
+
+  UInt8Array description_string(uint8_t key) {
+    UInt8Array result;
+
+    result.data = reinterpret_cast<uint8_t *>(&board_.buffer_[0]);
+    switch (key) {
+      case DescriptionStrings_NAME:
+        result.length = strlen(board_.name());
+        break;
+      case DescriptionStrings_HARDWARE_VERSION:
+        result.length = strlen(board_.hardware_version());
+        break;
+      case DescriptionStrings_URL:
+        result.length = strlen(board_.url());
+        break;
+      case DescriptionStrings_SOFTWARE_VERSION:
+        result.length = strlen(board_.software_version());
+        break;
+      case DescriptionStrings_PROTOCOL_NAME:
+        result.length = strlen(board_.protocol_name());
+        break;
+      case DescriptionStrings_PROTOCOL_VERSION:
+        result.length = strlen(board_.protocol_version());
+        break;
+      case DescriptionStrings_MANUFACTURER:
+        result.length = strlen(board_.manufacturer());
+        break;
       default:
-        return 0xFFFF;
+        result.data[0] = '\0';
+        result.length = 0;
+        break;
     }
+    return result;
   }
 };
-
 
 #endif  // #ifndef ___NODE__H___

@@ -3,17 +3,19 @@
 #include "Memory.h"
 #include "OneWire.h"
 #include "EEPROM.h"
+#include "nanopb.h"
+#include "NadaMQ.h"
+#include "ArduinoRPC.h"
+#include "Array.h"
 #include "PacketParser.h"
 #include "Node.h"
-#include "CommandPacketHandler.h"
 #include "NodeCommandProcessor.h"
-#include "packet_handler.h"
 #include "signal_generator_board.h"
 
 //#define DISABLE_I2C
 //#define DISABLE_SERIAL
 
-#define PACKET_SIZE   24
+#define PACKET_SIZE   48
 /* To save RAM, the serial-port interface may be disabled by defining
  * `DISABLE_SERIAL`. */
 #ifndef DISABLE_SERIAL
