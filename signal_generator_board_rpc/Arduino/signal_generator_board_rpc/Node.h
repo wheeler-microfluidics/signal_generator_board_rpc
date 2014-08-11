@@ -38,9 +38,9 @@ public:
   /**************************************************************
    * METHODS
    **************************************************************/
-  UInt8Array pot_values() {
-    UInt8Array result;
-    result.data = reinterpret_cast<uint8_t *>(&board_.buffer_[0]);
+  UInt16Array pot_values() {
+    UInt16Array result;
+    result.data = reinterpret_cast<uint16_t *>(&board_.buffer_[0]);
     for(int i = 0; i < board_.POT_COUNT; i++) {
       result.data[i] = board_.pot(i);
     }
