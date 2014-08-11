@@ -15,7 +15,7 @@
 //#define DISABLE_I2C
 //#define DISABLE_SERIAL
 
-#define PACKET_SIZE   48
+#define PACKET_SIZE   55
 /* To save RAM, the serial-port interface may be disabled by defining
  * `DISABLE_SERIAL`. */
 #ifndef DISABLE_SERIAL

@@ -1,7 +1,5 @@
-from collections import OrderedDict
 import time
 
-import numpy as np
 from nadamq.command_proxy import (NodeProxy, RemoteNodeProxy,
                                   CommandRequestManager,
                                   CommandRequestManagerDebug, SerialStream)
@@ -10,7 +8,13 @@ from .requests import (REQUEST_TYPES, CommandResponse, CommandRequest,
 from .protobuf_custom import DescriptionStrings
 
 
-class SignalGeneratorBoard(NodeProxy):
+class SignalGeneratorBoardMixin(object):
+    def description(self):
+        return dict([(k, self.description_string(key=v))
+                     for k, v in DescriptionStrings.items()])
+
+
+class SignalGeneratorBoard(NodeProxy, SignalGeneratorBoardMixin):
     def __init__(self, port, baudrate=115200, debug=False):
         if not debug:
             request_manager = CommandRequestManager(REQUEST_TYPES,
@@ -31,7 +35,7 @@ class SignalGeneratorBoard(NodeProxy):
         print 'free memory:', self.ram_free()
 
 
-class RemoteSignalGeneratorBoard(RemoteNodeProxy):
+class RemoteSignalGeneratorBoard(RemoteNodeProxy, SignalGeneratorBoardMixin):
     def __init__(self, forward_proxy, remote_address, debug=False,
                  timeout=None):
         if not debug:
