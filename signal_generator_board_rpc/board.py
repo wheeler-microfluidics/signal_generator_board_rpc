@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import time
 
 from nadamq.command_proxy import (NodeProxy, RemoteNodeProxy,
@@ -5,7 +6,31 @@ from nadamq.command_proxy import (NodeProxy, RemoteNodeProxy,
                                   CommandRequestManagerDebug, SerialStream)
 from .requests import (REQUEST_TYPES, CommandResponse, CommandRequest,
                        CommandType)
-from .protobuf_custom import DescriptionStrings
+try:
+    from .protobuf_custom import DescriptionStrings
+except ImportError:
+    # `protobuf_commands.py` must have been generated with an old version of
+    # `protoc`, so we have to manually wrap the `_COMMANDTYPE` enum.
+    from .protobuf_custom import _DESCRIPTIONSTRINGS
+
+    class DescriptionStrings(object):
+        by_name = OrderedDict(sorted([(k, v.number)
+                                      for k, v in
+                                      _DESCRIPTIONSTRINGS.values_by_name
+                                      .items()]))
+        by_value = OrderedDict([(v, k) for k, v in by_name.items()])
+
+        @classmethod
+        def Name(cls, value):
+            return cls.by_value[value]
+
+        @classmethod
+        def Value(cls, name):
+            return cls.by_name[name]
+
+        @classmethod
+        def items(cls):
+            return cls.by_name.items()
 
 
 class SignalGeneratorBoardMixin(object):

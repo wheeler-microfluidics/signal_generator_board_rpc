@@ -20,14 +20,6 @@ def get_sketch_directory():
     return package_path().joinpath('Arduino').dirs()[0]
 
 
-def get_nanopb_directory():
-    return package_path().joinpath('libs', 'nanopb')
-
-
-def get_nano_code_directory():
-    return package_path().joinpath('protobuf', 'nano')
-
-
 def get_includes():
     '''
     Return directories containing the Arduino header files.
@@ -43,8 +35,7 @@ def get_includes():
         ...
 
     '''
-    return [get_sketch_directory(), get_nano_code_directory(),
-            get_nanopb_directory()] + nadamq.get_includes()
+    return [get_sketch_directory()] + nadamq.get_includes()
 
 
 def get_sources():
@@ -52,8 +43,7 @@ def get_sources():
     Return Arduino source file paths.  This includes any supplementary source
     files that are not contained in Arduino libraries.
     '''
-    return (get_sketch_directory().files('*.c*') +
-            get_nano_code_directory().files('*.c*'))
+    return get_sketch_directory().files('*.c*')
 
 
 def get_firmwares():

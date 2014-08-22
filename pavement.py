@@ -32,7 +32,7 @@ setup(name='wheeler.signal_generator_board_rpc',
       author_email='christian@fobel.net',
       url='http://github.com/wheeler-microfluidics/signal_generator_board_rpc.git',
       license='GPLv2',
-      packages=['signal_generator_board_rpc'],
+      packages=['arduino_rpc', 'signal_generator_board_rpc'],
       package_data=signal_generator_board_rpc_files)
 
 
@@ -43,7 +43,6 @@ def generate_command_code():
                                                        False))
 
     definition_str = code_generator.get_protobuf_definitions()
-    #import pudb; pudb.set_trace()
     output_dir = package_path().joinpath('protobuf').abspath()
     output_file = output_dir.joinpath('%s.proto' % PROTO_PREFIX)
     with output_file.open('wb') as output:
@@ -64,26 +63,39 @@ def generate_command_code():
 # [1]: https://code.google.com/p/nanopb/source/browse/examples/using_union_messages/README.txt
 @needs('generate_command_code')
 def generate_nanopb_code():
-    nanopb_home = package_path().joinpath('libs', 'nanopb').abspath()
-    output_dir = package_path().joinpath('protobuf').abspath()
-    sh('cd %s; ./protoc.sh %s %s.proto . ; ./protoc.sh %s custom.proto . ; cd nano ; rename -f \'s/\.pb/_pb/g\' *.* ; sed \'s/\.pb/_pb/g\' -i *.h *.c ; mv *.* %s' % (
-        output_dir, nanopb_home, PROTO_PREFIX, nanopb_home,
-        get_sketch_directory()))
+    from nanopb_helpers import compile_nanopb
+
+    protobuf_dir = package_path().joinpath('protobuf').abspath()
+    for proto_path in protobuf_dir.files('*.proto'):
+        prefix = proto_path.namebase
+        nanopb = compile_nanopb(proto_path)
+        header_name = prefix + '_pb.h'
+        source_name = prefix + '_pb.c'
+        sketch = get_sketch_directory()
+        print 'write `%s` and `%s` to `%s`' % (header_name, source_name,
+                                               sketch)
+        sketch.joinpath(header_name).write_bytes(nanopb['header'])
+        sketch.joinpath(source_name).write_bytes(nanopb['source']
+                                                 .replace('{{ header_path }}',
+                                                          header_name))
 
 
 @task
-@needs('generate_nanopb_code')
-def copy_nanopb_python_module():
-    code_dir = package_path().joinpath('protobuf', 'py').abspath()
+@needs('generate_command_code')
+def generate_pb_python_module():
+    from nanopb_helpers import compile_pb
+
     output_dir = package_path().abspath()
-    protobuf_commands_file = list(code_dir.files('custom_pb2.py'))[0]
-    protobuf_commands_file.copy(output_dir.joinpath('protobuf_custom.py'))
-    protobuf_commands_file = list(code_dir.files('commands_pb2.py'))[0]
-    protobuf_commands_file.copy(output_dir.joinpath('protobuf_commands.py'))
+    protobuf_dir = package_path().joinpath('protobuf').abspath()
+    for proto_path in protobuf_dir.files('*.proto'):
+        prefix = proto_path.namebase
+        pb = compile_pb(proto_path)
+        output_dir.joinpath('protobuf_%s.py' %
+                            prefix).write_bytes(pb['python'])
 
 
 @task
-@needs('copy_nanopb_python_module', 'generate_command_code')
+@needs('generate_nanopb_code', 'generate_pb_python_module')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
           ('boards=', 'b', 'Comma-separated list of board names to compile '
            'for (e.g., `uno`).')])
