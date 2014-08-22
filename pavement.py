@@ -15,10 +15,9 @@ except ImportError:
     warnings.warn('Could not import `clang`-based code-generator.')
 
 
-signal_generator_board_rpc_files = find_package_data(package=
-                                                'signal_generator_board_rpc',
-                                                where= 'signal_generator_board_rpc',
-                                                only_in_packages=False)
+signal_generator_board_rpc_files = find_package_data(
+    package='signal_generator_board_rpc', where='signal_generator_board_rpc',
+    only_in_packages=False)
 pprint(signal_generator_board_rpc_files)
 
 PROTO_PREFIX = 'commands'
@@ -32,7 +31,8 @@ setup(name='wheeler.signal_generator_board_rpc',
       author_email='christian@fobel.net',
       url='http://github.com/wheeler-microfluidics/signal_generator_board_rpc.git',
       license='GPLv2',
-      packages=['arduino_rpc', 'signal_generator_board_rpc'],
+      install_requires=['arduino_rpc'],
+      packages=['signal_generator_board_rpc'],
       package_data=signal_generator_board_rpc_files)
 
 
