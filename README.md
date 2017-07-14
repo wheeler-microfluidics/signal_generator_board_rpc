@@ -11,7 +11,7 @@ Below, we show an example session interacting with the signal-generator board
 through a serial stream.
 
     >>> from signal_generator_board_rpc import SignalGeneratorBoard
-    >>> s = SignalGeneratorBoard(‘/dev/ttyUSB0’)
+    >>> s = SignalGeneratorBoard("/dev/ttyUSB0")
 
     free memory: 191
     >>> s.
@@ -35,11 +35,11 @@ through a serial stream.
     >>> s.waveform_voltage()
     1.0099999904632568
     >>> hex(s.i2c_address())
-    ‘0x10’
+    "0x10"
     >>> s.set_i2c_address(address=0x11)
     <signal_generator_board_rpc.protobuf_commands.SetI2cAddressResponse object at 0x7f477cb44830>
     >>> hex(s.i2c_address())
-    ‘0x11’
+    "0x11"
 
 
 [1]: http://www.atmel.ca/devices/ATMEGA328.aspx
