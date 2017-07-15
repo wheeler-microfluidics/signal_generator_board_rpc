@@ -1,5 +1,3 @@
-
-
 ![https://ci.appveyor.com/api/projects/status/github/wheeler-microfluidics/signal_generator_board_rpc?branch=master&svg=true](https://ci.appveyor.com/api/projects/status/github/wheeler-microfluidics/signal_generator_board_rpc?branch=master&svg=true)
 
 
